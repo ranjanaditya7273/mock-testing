@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layout, Home, PlusSquare, PlusCircle, X, Edit3, ChevronRight, Trash2, AlertTriangle, Menu, RefreshCw, ShieldCheck } from 'lucide-react'; 
+import { Layout, Home, PlusSquare, PlusCircle, X, Edit3, ChevronRight, Trash2, AlertTriangle, Menu, RefreshCw, ShieldCheck, Search, SearchX, DatabaseZap } from 'lucide-react'; 
 import { openDB } from '../db'; 
 
 const HomeQuiz = ({ setCategories }) => {
   const navigate = useNavigate();
   const [localCategories, setLocalCategories] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
@@ -22,6 +23,10 @@ const HomeQuiz = ({ setCategories }) => {
   const [deleteTargetIndex, setDeleteTargetIndex] = useState(null);
   const [authorNameInput, setAuthorNameInput] = useState("");
   const [isWrongAuthor, setIsWrongAuthor] = useState(false);
+
+  const filteredCategories = localCategories.filter(cat => 
+    cat.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const parseRawText = (text) => {
     if (!text) return [];
@@ -101,7 +106,6 @@ const HomeQuiz = ({ setCategories }) => {
         };
 
         tx.oncomplete = () => {
-          console.log("✅ Admin Sync Complete!");
           loadLocalData(); 
           setShowAdminModal(false);
           setAdminEmail("");
@@ -127,15 +131,8 @@ const HomeQuiz = ({ setCategories }) => {
 
       request.onsuccess = () => {
         const savedSections = request.result.map(s => s.name);
-        if (savedSections.length > 0) {
-          setLocalCategories(savedSections);
-          setCategories(savedSections);
-        } else {
-          const defaults = [];
-          setLocalCategories(defaults);
-          setCategories(defaults);
-          saveAllToDB(defaults);
-        }
+        setLocalCategories(savedSections);
+        setCategories(savedSections);
       };
     } catch (err) {
       console.error("Error loading sections:", err);
@@ -225,7 +222,6 @@ const HomeQuiz = ({ setCategories }) => {
           <button onClick={() => { setIsEditing(false); setSectionName(""); setShowModal(true); }} style={navBtn}>
             <PlusCircle size={18} /> New Section
           </button>
-          {/* Admin Sync Button */}
           <button onClick={() => setShowAdminModal(true)} style={navBtnPrimary}>
             <ShieldCheck size={18} /> Admin Sync
           </button>
@@ -254,27 +250,63 @@ const HomeQuiz = ({ setCategories }) => {
 
       <div style={mainContentStyle}>
         <div style={welcomeHeader}>
-          <h1 style={{ fontSize: '2.2rem', color: '#0f172a', marginBottom: '10px' }}>Quiz Library</h1>
+          <h1 style={{ fontSize: '2.2rem', color: '#0f172a', marginBottom: '5px' }}>Quiz Library</h1>
           <p style={{ color: '#64748b' }}>Admin access required to sync cloud databases.</p>
+          
+          {/* Show Search only if categories exist */}
+          {localCategories.length > 0 && (
+            <div style={searchContainer}>
+              <Search size={20} color="#64748b" style={{ marginLeft: '15px' }} />
+              <input 
+                type="text" 
+                placeholder="Search sections..." 
+                style={searchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <X size={18} color="#64748b" style={{ marginRight: '15px', cursor: 'pointer' }} onClick={() => setSearchQuery("")} />
+              )}
+            </div>
+          )}
         </div>
 
-        <div style={gridStyle}>
-          {localCategories.map((cat, index) => (
-            <div key={index} style={cardStyle} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}>
-              <div style={iconCircle}><Layout size={28} color="#3b82f6" /></div>
-              <div style={{ flex: 1 }}>
-                <h3 style={categoryTitle}>{cat}</h3>
-                <p style={categorySubText}>Open Section <ChevronRight size={14} style={{ verticalAlign: 'middle' }} /></p>
+        {localCategories.length === 0 ? (
+          /* NEW: Empty State for First Time User */
+          <div style={firstTimeBox}>
+            <DatabaseZap size={50} color="#3b82f6" />
+            <h2 style={{ color: '#1e293b', marginTop: '20px' }}>No Content Available!</h2>
+            <p style={{ color: '#64748b', maxWidth: '400px', margin: '10px auto', lineHeight: '1.5' }}>
+              Please ask **Admin** to sync the questions from the cloud or use the **Admin Sync** button above to fetch data.
+            </p>
+          </div>
+        ) : filteredCategories.length > 0 ? (
+          <div style={gridStyle}>
+            {filteredCategories.map((cat, index) => (
+              <div key={index} style={cardStyle} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}>
+                <div style={iconCircle}><Layout size={28} color="#3b82f6" /></div>
+                <div style={{ flex: 1 }}>
+                  <h3 style={categoryTitle}>{cat}</h3>
+                  <p style={categorySubText}>Open Section <ChevronRight size={14} style={{ verticalAlign: 'middle' }} /></p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={(e) => openEditModal(e, index, cat)} style={editIconBtn} title="Edit Section"><Edit3 size={18} /></button>
+                  <button onClick={(e) => openDeleteModal(e, index)} style={deleteIconBtn} title="Delete Section"><Trash2 size={18} /></button>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={(e) => openEditModal(e, index, cat)} style={editIconBtn} title="Edit Section"><Edit3 size={18} /></button>
-                <button onClick={(e) => openDeleteModal(e, index)} style={deleteIconBtn} title="Delete Section"><Trash2 size={18} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div style={notFoundStyle}>
+            <SearchX size={60} color="#cbd5e1" strokeWidth={1.5} />
+            <h3 style={{ color: '#1e293b', marginTop: '15px' }}>Section Not Found</h3>
+            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No results for "{searchQuery}"</p>
+            <button onClick={() => setSearchQuery("")} style={clearSearchBtn}>Clear Search</button>
+          </div>
+        )}
       </div>
 
+      {/* Modals are kept same... */}
       {showAdminModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
@@ -285,12 +317,9 @@ const HomeQuiz = ({ setCategories }) => {
             <form onSubmit={handleAdminSync}>
               <label style={labelStyle}>Admin Email</label>
               <input type="email" style={inputStyle} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="Email address" required />
-              
               <label style={{...labelStyle, marginTop: '15px'}}>Password</label>
               <input type="password" style={inputStyle} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Enter Password" required />
-              
               {loginError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '10px' }}>{loginError}</p>}
-              
               <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
                 <button type="submit" style={saveBtn} disabled={isSyncing}>
                    {isSyncing ? "Syncing..." : "Verify & Sync"}
@@ -351,6 +380,52 @@ const HomeQuiz = ({ setCategories }) => {
   );
 };
 
+// --- Updated Styles ---
+
+const mainContentStyle = { 
+  padding: '20px 5% 50px', // Top padding reduced from 50px to 20px
+  maxWidth: '1200px', 
+  margin: '0 auto' 
+};
+
+const welcomeHeader = { 
+  textAlign: 'center', 
+  marginBottom: '25px' // Reduced margin-bottom from 50px
+};
+
+const firstTimeBox = {
+  textAlign: 'center',
+  padding: '60px 20px',
+  backgroundColor: '#fff',
+  borderRadius: '25px',
+  border: '2px dashed #3b82f6',
+  marginTop: '30px'
+};
+
+const searchContainer = {
+  display: 'flex',
+  alignItems: 'center',
+  backgroundColor: '#fff',
+  width: '100%',
+  maxWidth: '500px',
+  margin: '20px auto 0',
+  borderRadius: '15px',
+  border: '1.5px solid #e2e8f0',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+};
+
+const searchInput = {
+  flex: 1, border: 'none', padding: '14px 15px', fontSize: '1rem', outline: 'none', backgroundColor: 'transparent', color: '#1e293b'
+};
+
+const notFoundStyle = {
+  textAlign: 'center', padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fff', borderRadius: '20px', border: '2px dashed #e2e8f0'
+};
+
+const clearSearchBtn = {
+  marginTop: '20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer'
+};
+
 const syncStatusBarStyle = { backgroundColor: '#3b82f6', color: '#fff', textAlign: 'center', padding: '5px', fontSize: '0.8rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' };
 const navStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 5%', backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 };
 const desktopNavLinks = { display: 'flex', gap: '15px' };
@@ -361,8 +436,6 @@ const hamburgerBtn = { display: 'none', background: '#f8fafc', border: '1.5px so
 const drawerOverlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(15, 23, 42, 0.4)', zIndex: 1000, display: 'flex', justifyContent: 'flex-start' };
 const drawerContent = { backgroundColor: '#fff', width: '280px', height: '100%', padding: '30px', boxShadow: '4px 0 15px rgba(0,0,0,0.1)' };
 const drawerLink = { background: 'none', border: 'none', textAlign: 'left', fontSize: '1.1rem', fontWeight: '600', color: '#1e293b', padding: '12px 0', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' };
-const mainContentStyle = { padding: '50px 5%', maxWidth: '1200px', margin: '0 auto' };
-const welcomeHeader = { textAlign: 'center', marginBottom: '50px' };
 const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '25px' };
 const cardStyle = { display: 'flex', alignItems: 'center', gap: '15px', backgroundColor: '#fff', padding: '25px', borderRadius: '16px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: '0.3s ease' };
 const iconCircle = { backgroundColor: '#eff6ff', minWidth: '55px', height: '55px', borderRadius: '12px', display: 'flex', justifyContent: 'center', alignItems: 'center' };
