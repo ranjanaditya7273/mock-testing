@@ -3,7 +3,8 @@ import { useState } from 'react';
 import HomeQuiz from './Component/homeQuiz';
 import CreateTestForm from './Component/CreateTestForm';
 import CategoryQuizzes from './Component/CategoryQuizzes';
-import ViewQuestions from './Component/ViewQuestions'; // 1. ViewQuestions ko import karein
+import ViewQuestions from './Component/ViewQuestions';
+import QuizAnalysis from './Component/QuizAnalysis'; // Naya Page Import Kiya
 
 function App() {
   const [categories, setCategories] = useState([]);
@@ -20,8 +21,11 @@ function App() {
         {/* Category Page: Ek particular category ke saare quizzes dikhayega */}
         <Route path="/category/:categoryName" element={<CategoryQuizzes />} />
 
-        {/* 2. View Questions Page: Yahan Quiz Start hoga aur questions dikhenge */}
+        {/* View Questions Page: Yahan Quiz Start hoga */}
         <Route path="/view-questions" element={<ViewQuestions />} />
+
+        {/* Analysis Page: Correct/Wrong/Skip questions ki list dikhane ke liye */}
+        <Route path="/taken-quiz-list" element={<QuizAnalysis />} />
         
       </Routes>
     </Router>

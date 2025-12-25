@@ -8,18 +8,11 @@ const CategoryQuizzes = () => {
   const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedQuizId, setSelectedQuizId] = useState(null);
   
   const [authorNameInput, setAuthorNameInput] = useState("");
   const [isWrongAuthor, setIsWrongAuthor] = useState(false);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   const fetchQuizzes = async () => {
     try {
@@ -64,22 +57,58 @@ const CategoryQuizzes = () => {
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
   };
 
-  const ScoreProgress = ({ score }) => {
+  // Time format karne ka helper
+  const formatTimeDisplay = (totalSeconds) => {
+    if (totalSeconds === undefined || totalSeconds === null) return null;
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return (
+      <span className="time-display-mobile">
+        <span className="separator-desktop"> | </span>
+        <Timer size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+        {mins}m {secs}s
+      </span>
+    );
+  };
+
+  // ScoreProgress component FIX
+  const ScoreProgress = ({ score, quizData }) => {
     if (!score) return null;
     const total = score.total || (score.correct + score.wrong + score.skipped);
     const correctPct = Math.round((score.correct / total) * 100) || 0;
     const wrongPct = Math.round((score.wrong / total) * 100) || 0;
 
+    const handleStatClick = (filterType) => {
+      // FIX: Route ko '/taken-quiz-list' kar diya hai taaki aapki nayi file open ho
+      navigate('/taken-quiz-list', { 
+        state: { 
+          quizTitle: quizData.testName,
+          questions: quizData.questions,
+          userAnswers: score.userAnswers || [], 
+          filter: filterType 
+        } 
+      });
+    };
+
     return (
       <div style={styles.scoreSectionWrapper}>
         <div style={styles.statsRow}>
-          <div style={{ ...styles.statItem, color: '#10b981' }}>
+          <div 
+            onClick={() => handleStatClick('correct')} 
+            style={{ ...styles.statItem, color: '#10b981', cursor: 'pointer' }}
+          >
             <span style={styles.dot}>●</span> {score.correct} Correct ({correctPct}%)
           </div>
-          <div style={{ ...styles.statItem, color: '#ef4444' }}>
+          <div 
+            onClick={() => handleStatClick('wrong')} 
+            style={{ ...styles.statItem, color: '#ef4444', cursor: 'pointer' }}
+          >
             <span style={styles.dot}>●</span> {score.wrong} Wrong ({wrongPct}%)
           </div>
-          <div style={{ ...styles.statItem, color: '#b45309' }}>
+          <div 
+            onClick={() => handleStatClick('skipped')} 
+            style={{ ...styles.statItem, color: '#b45309', cursor: 'pointer' }}
+          >
             <span style={styles.dot}>●</span> {score.skipped} Skip
           </div>
         </div>
@@ -94,8 +123,16 @@ const CategoryQuizzes = () => {
 
   return (
     <div style={styles.pageWrapper}>
+      <style>
+        {`
+          @media (max-width: 480px) {
+            .status-badge-container { flex-direction: column !important; align-items: flex-start !important; gap: 4px !important; padding: 10px 14px !important; }
+            .separator-desktop { display: none !important; }
+            .time-display-mobile { display: flex !important; align-items: center; margin-left: 0 !important; }
+          }
+        `}
+      </style>
       <div style={styles.contentContainer}>
-        
         <nav style={styles.navStyle}>
           <button onClick={() => navigate('/')} style={styles.backBtn}>
             <ArrowLeft size={18}/> Back
@@ -114,9 +151,8 @@ const CategoryQuizzes = () => {
             {quizzes.length > 0 ? (
               quizzes.map((quiz, idx) => {
                 const isTaken = !!quiz.latestScore;
-                
                 return (
-                  <div key={idx} style={{
+                  <div key={quiz.id || idx} style={{
                     ...styles.cardContainer,
                     background: isTaken 
                       ? 'linear-gradient(180deg, #e4f6eb 0%, #f0fdf4 100%)' 
@@ -125,13 +161,20 @@ const CategoryQuizzes = () => {
                   }}>
                     
                     <div style={{ padding: '12px 15px 0 15px' }}>
-                        <div style={{
+                        <div className="status-badge-container" style={{
                             ...styles.statusBadge,
                             backgroundColor: isTaken ? '#c6f6d5' : '#ffcf9d',
-                            color: isTaken ? '#22543d' : '#854d0e'
+                            color: isTaken ? '#22543d' : '#854d0e',
+                            display: 'flex', alignItems: 'center'
                         }}>
                             {isTaken ? (
-                                <><CheckCircle size={14} /> Quiz Completed on {formatDate(quiz.latestScore.date || new Date())}</>
+                                <>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <CheckCircle size={14} /> 
+                                        Completed: {formatDate(quiz.latestScore.date)}
+                                    </div>
+                                    {formatTimeDisplay(quiz.latestScore.timeTaken)}
+                                </>
                             ) : (
                                 <><Info size={14} /> Ready to start</>
                             )}
@@ -145,12 +188,11 @@ const CategoryQuizzes = () => {
                         </button>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <h4 style={styles.titleStyle}>{quiz.testName}</h4>
-                          <p style={styles.subtitleStyle}>{quiz.totalQuestions} Questions Available</p>
+                          <p style={styles.subtitleStyle}>{quiz.questions?.length || 0} Questions</p>
                         </div>
                       </div>
 
                       <div style={styles.buttonGroup}>
-                        {/* New Timing Test Button */}
                         <button 
                           onClick={() => navigate('/view-questions', { state: { data: quiz, mode: 'timer' } })} 
                           style={{...styles.actionBtn, backgroundColor: '#f97316', color: '#fff', marginBottom: '4px'}}
@@ -178,7 +220,7 @@ const CategoryQuizzes = () => {
                       </div>
                     </div>
                     
-                    <ScoreProgress score={quiz.latestScore} />
+                    {isTaken && <ScoreProgress score={quiz.latestScore} quizData={quiz} />}
                   </div>
                 );
               })
@@ -228,16 +270,16 @@ const styles = {
   quizCard: { padding: '15px 20px 20px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   scoreSectionWrapper: { width: '100%', backgroundColor: '#fff', borderTop: '1px solid #f1f5f9' },
   statsRow: { display: 'flex', justifyContent: 'space-around', padding: '12px', fontSize: '0.75rem', fontWeight: '800' },
-  statItem: { display: 'flex', alignItems: 'center', gap: '5px' },
+  statItem: { display: 'flex', alignItems: 'center', gap: '5px', transition: 'opacity 0.2s' },
   dot: { fontSize: '12px' },
   scoreBarWrapper: { display: 'flex', height: '8px', width: '100%', backgroundColor: '#f1f5f9' },
   barSegment: { height: '100%' },
   deleteIconButton: { background: 'white', border: '1px solid #fee2e2', borderRadius: '12px', padding: '10px', cursor: 'pointer', marginRight: '15px' },
   leftInfoSection: { display: 'flex', alignItems: 'center', flex: 1 },
-  titleStyle: { margin: '0', color: '#1e293b', fontSize: '1.3rem', fontWeight: '900' },
-  subtitleStyle: { margin: '2px 0 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: '600' },
+  titleStyle: { margin: '0', color: '#1e293b', fontSize: '1.2rem', fontWeight: '900' },
+  subtitleStyle: { margin: '2px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontWeight: '600' },
   buttonGroup: { display: 'flex', flexDirection: 'column', gap: '6px', width: '145px' },
-  actionBtn: { border: 'none', padding: '10px 0', borderRadius: '14px', cursor: 'pointer', fontWeight: '800', fontSize: '0.85rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { border: 'none', padding: '10px 0', borderRadius: '14px', cursor: 'pointer', fontWeight: '800', fontSize: '0.8rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   practiceBtn: { backgroundColor: '#fff', color: '#475569', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
   backBtn: { background: '#fff', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800', padding: '10px 18px', borderRadius: '15px' },
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },

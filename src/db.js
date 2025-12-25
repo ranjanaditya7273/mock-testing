@@ -13,7 +13,7 @@ export const openDB = () => {
       });
     }
 
-    // VERSION KO 2 RAKHA HAI
+    // Version ko humesha update rakhein agar schema badle
     const request = indexedDB.open("QuizDatabase", 2);
 
     request.onupgradeneeded = (event) => {
@@ -51,6 +51,34 @@ export const saveTestToDB = async (testData) => {
   });
 };
 
+/**
+ * 🆕 UPDATE TEST SCORE FUNCTION
+ * Ye function quiz ke results aur user ke answers ko save karne ke liye hai.
+ */
+export const updateTestScore = async (id, scoreData) => {
+  const db = await openDB();
+  const tx = db.transaction("tests", "readwrite");
+  const store = tx.objectStore("tests");
+
+  return new Promise((resolve, reject) => {
+    const getRequest = store.get(id);
+
+    getRequest.onsuccess = () => {
+      const data = getRequest.result;
+      if (data) {
+        // latestScore mein correct, wrong, skipped aur userAnswers array save hoga
+        data.latestScore = scoreData;
+        const updateRequest = store.put(data);
+        updateRequest.onsuccess = () => resolve(true);
+        updateRequest.onerror = () => reject("Failed to update score");
+      } else {
+        reject("Test not found");
+      }
+    };
+    getRequest.onerror = () => reject("Error fetching test for update");
+  });
+};
+
 export const getAllTestsFromDB = async () => {
   const db = await openDB();
   const tx = db.transaction("tests", "readonly");
@@ -63,10 +91,6 @@ export const getAllTestsFromDB = async () => {
   });
 };
 
-/**
- * 🆕 DELETE TEST FUNCTION (Required for the delete button to work)
- * @param {number} id - The ID of the test to delete
- */
 export const deleteTestFromDB = async (id) => {
   const db = await openDB();
   const tx = db.transaction("tests", "readwrite");
@@ -90,8 +114,8 @@ export const saveSectionsToDB = async (sections) => {
   const store = tx.objectStore("sections");
   
   return new Promise((resolve, reject) => {
-    store.clear().onsuccess = () => {
-      // Sections array handle karna (Strings or Objects)
+    const clearRequest = store.clear();
+    clearRequest.onsuccess = () => {
       sections.forEach(item => {
         const sectionData = typeof item === 'string' ? { name: item } : item;
         store.add(sectionData);
@@ -114,10 +138,6 @@ export const getAllSectionsFromDB = async () => {
   });
 };
 
-/**
- * 🆕 DELETE SECTION FUNCTION
- * @param {number} id - The ID of the section to delete
- */
 export const deleteSectionFromDB = async (id) => {
   const db = await openDB();
   const tx = db.transaction("sections", "readwrite");

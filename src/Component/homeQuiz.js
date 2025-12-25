@@ -79,8 +79,7 @@ const HomeQuiz = ({ setCategories }) => {
         
         existingSectionsRequest.onsuccess = async () => {
           const existingNames = new Set(existingSectionsRequest.result.map(s => s.name));
-          const newCategoriesFromApi = new Set();
-
+          // API data ko order preserve karne ke liye loop karte hain
           for (const quiz of result.data) {
             const questionsArray = parseRawText(quiz.fileContent);
             testStore.put({
@@ -93,14 +92,9 @@ const HomeQuiz = ({ setCategories }) => {
               createdAt: quiz.createdAt
             });
 
-            if (quiz.category) {
-              newCategoriesFromApi.add(quiz.category.trim());
-            }
-          }
-
-          for (const catName of newCategoriesFromApi) {
-            if (!existingNames.has(catName)) {
-              sectionStore.add({ name: catName });
+            if (quiz.category && !existingNames.has(quiz.category.trim())) {
+              sectionStore.add({ name: quiz.category.trim(), createdAt: new Date(quiz.createdAt).getTime() });
+              existingNames.add(quiz.category.trim());
             }
           }
         };
@@ -122,6 +116,7 @@ const HomeQuiz = ({ setCategories }) => {
     }
   };
 
+  // --- UPDATED: Isse sequence order maintain rahega (First created, first shown) ---
   const loadLocalData = async () => {
     try {
       const db = await openDB();
@@ -130,6 +125,9 @@ const HomeQuiz = ({ setCategories }) => {
       const request = store.getAll();
 
       request.onsuccess = () => {
+        // Hum categories ko unki creation order (default auto-increment ID) ke hisaab se rakhenge
+        // Agar aapko History (Pehle wala) top pe chahiye, toh simple getAll() kaafi hai
+        // Agar ulta ho rha ho toh .reverse() laga sakte hain.
         const savedSections = request.result.map(s => s.name);
         setLocalCategories(savedSections);
         setCategories(savedSections);
@@ -253,7 +251,6 @@ const HomeQuiz = ({ setCategories }) => {
           <h1 style={{ fontSize: '2.2rem', color: '#0f172a', marginBottom: '5px' }}>Quiz Library</h1>
           <p style={{ color: '#64748b' }}>Admin access required to sync cloud databases.</p>
           
-          {/* Show Search only if categories exist */}
           {localCategories.length > 0 && (
             <div style={searchContainer}>
               <Search size={20} color="#64748b" style={{ marginLeft: '15px' }} />
@@ -272,7 +269,6 @@ const HomeQuiz = ({ setCategories }) => {
         </div>
 
         {localCategories.length === 0 ? (
-          /* NEW: Empty State for First Time User */
           <div style={firstTimeBox}>
             <DatabaseZap size={50} color="#3b82f6" />
             <h2 style={{ color: '#1e293b', marginTop: '20px' }}>No Content Available!</h2>
@@ -306,7 +302,6 @@ const HomeQuiz = ({ setCategories }) => {
         )}
       </div>
 
-      {/* Modals are kept same... */}
       {showAdminModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
@@ -380,52 +375,14 @@ const HomeQuiz = ({ setCategories }) => {
   );
 };
 
-// --- Updated Styles ---
-
-const mainContentStyle = { 
-  padding: '20px 5% 50px', // Top padding reduced from 50px to 20px
-  maxWidth: '1200px', 
-  margin: '0 auto' 
-};
-
-const welcomeHeader = { 
-  textAlign: 'center', 
-  marginBottom: '25px' // Reduced margin-bottom from 50px
-};
-
-const firstTimeBox = {
-  textAlign: 'center',
-  padding: '60px 20px',
-  backgroundColor: '#fff',
-  borderRadius: '25px',
-  border: '2px dashed #3b82f6',
-  marginTop: '30px'
-};
-
-const searchContainer = {
-  display: 'flex',
-  alignItems: 'center',
-  backgroundColor: '#fff',
-  width: '100%',
-  maxWidth: '500px',
-  margin: '20px auto 0',
-  borderRadius: '15px',
-  border: '1.5px solid #e2e8f0',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
-};
-
-const searchInput = {
-  flex: 1, border: 'none', padding: '14px 15px', fontSize: '1rem', outline: 'none', backgroundColor: 'transparent', color: '#1e293b'
-};
-
-const notFoundStyle = {
-  textAlign: 'center', padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fff', borderRadius: '20px', border: '2px dashed #e2e8f0'
-};
-
-const clearSearchBtn = {
-  marginTop: '20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer'
-};
-
+// --- Styles Same ---
+const mainContentStyle = { padding: '20px 5% 50px', maxWidth: '1200px', margin: '0 auto' };
+const welcomeHeader = { textAlign: 'center', marginBottom: '25px' };
+const firstTimeBox = { textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '25px', border: '2px dashed #3b82f6', marginTop: '30px' };
+const searchContainer = { display: 'flex', alignItems: 'center', backgroundColor: '#fff', width: '100%', maxWidth: '500px', margin: '20px auto 0', borderRadius: '15px', border: '1.5px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' };
+const searchInput = { flex: 1, border: 'none', padding: '14px 15px', fontSize: '1rem', outline: 'none', backgroundColor: 'transparent', color: '#1e293b' };
+const notFoundStyle = { textAlign: 'center', padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', backgroundColor: '#fff', borderRadius: '20px', border: '2px dashed #e2e8f0' };
+const clearSearchBtn = { marginTop: '20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
 const syncStatusBarStyle = { backgroundColor: '#3b82f6', color: '#fff', textAlign: 'center', padding: '5px', fontSize: '0.8rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' };
 const navStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 5%', backgroundColor: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 100 };
 const desktopNavLinks = { display: 'flex', gap: '15px' };

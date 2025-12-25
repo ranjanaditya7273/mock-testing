@@ -12,14 +12,14 @@ const ViewQuestions = () => {
   const [userSelections, setUserSelections] = useState({});
   const [showModal, setShowModal] = useState(false);
   
-  // Timer Mode States
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(15);
+  const [startTime] = useState(Date.now()); 
   const timerRef = useRef(null);
 
   const mode = location.state?.mode || 'exam'; 
 
-  // Timer logic
+  // Timer Logic
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
       if (timeLeft === 0) {
@@ -32,15 +32,7 @@ const ViewQuestions = () => {
     return () => clearInterval(timerRef.current);
   }, [timeLeft, currentQIndex, mode, showModal, testData]);
 
-  const handleNextOrFinish = () => {
-    if (currentQIndex < testData.questions.length - 1) {
-      setCurrentQIndex(prev => prev + 1);
-      setTimeLeft(15);
-    } else {
-      handleFinishQuiz();
-    }
-  };
-
+  // Practice Mode: Auto-select correct answers
   useEffect(() => {
     if (testData && mode === 'practice') {
       const autoSelect = {};
@@ -51,8 +43,18 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
+  const handleNextOrFinish = () => {
+    if (currentQIndex < testData.questions.length - 1) {
+      setCurrentQIndex(prev => prev + 1);
+      setTimeLeft(15);
+    } else {
+      handleFinishQuiz();
+    }
+  };
+
   const handleOptionClick = (questionIndex, selectedOptionIndex) => {
-    if ((mode === 'exam' || mode === 'timer') && userSelections[questionIndex] !== undefined) return;
+    // Practice mode mein click ko block karne ke liye condition
+    if (mode === 'practice' || ((mode === 'exam' || mode === 'timer') && userSelections[questionIndex] !== undefined)) return;
     
     const correctIdx = parseInt(testData.questions[questionIndex].answer);
     
@@ -62,7 +64,6 @@ const ViewQuestions = () => {
 
     setUserSelections(prev => ({ ...prev, [questionIndex]: selectedOptionIndex }));
 
-    // Timer mode: Auto go to next after short delay
     if (mode === 'timer') {
       setTimeout(() => {
         handleNextOrFinish();
@@ -78,11 +79,21 @@ const ViewQuestions = () => {
   };
 
   const handleFinishQuiz = async () => {
+    const endTime = Date.now();
+    const totalSecondsTaken = Math.floor((endTime - startTime) / 1000);
+
     const report = generateReport();
+    const labels = ["A", "B", "C", "D"];
+    const userAnswersArray = testData.questions.map((_, idx) => {
+        const selectedIdx = userSelections[idx];
+        return selectedIdx !== undefined ? labels[selectedIdx] : "";
+    });
+
     try {
       const db = await openDB();
       const tx = db.transaction("tests", "readwrite");
       const store = tx.objectStore("tests");
+      
       const updatedTest = { 
         ...testData, 
         latestScore: { 
@@ -90,9 +101,12 @@ const ViewQuestions = () => {
           wrong: report.wrong, 
           skipped: report.skipped,
           total: report.total,
-          date: new Date()
+          userAnswers: userAnswersArray, 
+          timeTaken: totalSecondsTaken,
+          date: new Date().toISOString()
         } 
       };
+      
       await store.put(updatedTest);
       setShowModal(true);
     } catch (err) {
@@ -118,7 +132,6 @@ const ViewQuestions = () => {
   if (loading) return <div style={centerMsg}>Loading Quiz...</div>;
   if (!testData) return <div style={centerMsg}>No Quiz Data Found!</div>;
 
-  // Single Question for Timer Mode
   const q = testData.questions[currentQIndex];
 
   return (
@@ -137,7 +150,7 @@ const ViewQuestions = () => {
           <h1 style={{ fontSize: '1.4rem', margin: '10px 0', color: '#1e293b' }}>{testData.testName}</h1>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <span style={modeBadgeStyle(mode)}>
-              {mode === 'practice' ? '📚 Practice' : mode === 'timer' ? '⏱ Timer Test' : '📝 Exam'}
+              {mode === 'practice' ? '📚 Practice Mode' : mode === 'timer' ? '⏱ Timer Test' : '📝 Exam'}
             </span>
             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
               {mode === 'timer' ? `Qn ${currentQIndex + 1}/${testData.questions.length}` : `${testData.questions.length} Qns`}
@@ -147,7 +160,6 @@ const ViewQuestions = () => {
       </div>
 
       <div style={{ padding: '0 20px 120px 20px' }}>
-        {/* If Timer Mode, show ONLY current question, else show ALL (exam/practice) */}
         {(mode === 'timer' ? [q] : testData.questions).map((item, idx) => {
           const qIdx = mode === 'timer' ? currentQIndex : idx;
           const isAnswered = userSelections[qIdx] !== undefined;
@@ -160,18 +172,41 @@ const ViewQuestions = () => {
               <div style={optionsGridStyle}>
                 {[item.a, item.b, item.c, item.d].map((optText, optIdx) => {
                   let bgColor = '#fff', borderColor = '#e2e8f0', textColor = '#1e293b';
+                  
                   if (isAnswered) {
-                    if (optIdx === correctIdx) { bgColor = '#d1fae5'; borderColor = '#10b981'; textColor = '#065f46'; }
-                    else if (optIdx === selectedIdx) { bgColor = '#fee2e2'; borderColor = '#ef4444'; textColor = '#991b1b'; }
+                    // Practice mode mein sirf correct wala green dikhega
+                    if (optIdx === correctIdx) { 
+                      bgColor = '#d1fae5'; borderColor = '#10b981'; textColor = '#065f46'; 
+                    } 
+                    // Exam mode mein galat wala red dikhega (Practice mein selection block hai)
+                    else if (optIdx === selectedIdx && mode !== 'practice') { 
+                      bgColor = '#fee2e2'; borderColor = '#ef4444'; textColor = '#991b1b'; 
+                    }
                   }
+
                   return (
-                    <div key={optIdx} onClick={() => handleOptionClick(qIdx, optIdx)} style={{ ...optionItemStyle, backgroundColor: bgColor, borderColor: borderColor, color: textColor, cursor: (isAnswered || mode === 'practice') ? 'default' : 'pointer' }}>
+                    <div 
+                      key={optIdx} 
+                      onClick={() => handleOptionClick(qIdx, optIdx)} 
+                      style={{ 
+                        ...optionItemStyle, 
+                        backgroundColor: bgColor, 
+                        borderColor: borderColor, 
+                        color: textColor, 
+                        // Practice mode ke liye cursor aur click disable logic
+                        cursor: mode === 'practice' ? 'default' : (isAnswered ? 'default' : 'pointer'),
+                        pointerEvents: mode === 'practice' ? 'none' : 'auto',
+                        opacity: (mode === 'practice' && optIdx !== correctIdx) ? 0.7 : 1
+                      }}
+                    >
                       <strong>{String.fromCharCode(65 + optIdx)})</strong> {optText}
                     </div>
                   );
                 })}
               </div>
-              {isAnswered && mode !== 'timer' && (
+              
+              {/* Practice Mode mein answer explanation box hide rakha hai, sirf correct option highlight hoga */}
+              {isAnswered && mode !== 'timer' && mode !== 'practice' && (
                 <div style={{ ...ansBoxStyle, backgroundColor: selectedIdx === correctIdx ? '#f0fdf4' : '#fff1f2', borderLeftColor: selectedIdx === correctIdx ? '#10b981' : '#ef4444' }}>
                   <p style={{ margin: 0, fontWeight: 'bold', color: selectedIdx === correctIdx ? '#10b981' : '#ef4444' }}>{selectedIdx === correctIdx ? "Correct!" : "Incorrect"}</p>
                   <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem' }}>Correct Answer: {getFormattedAnswer(item)}</p>
@@ -182,7 +217,8 @@ const ViewQuestions = () => {
         })}
       </div>
 
-      {(mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
+      {/* Practice mode mein footer submit button hide kiya gaya hai */}
+      {mode !== 'practice' && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
         <div style={stickyFooterStyle}>
           <button onClick={handleFinishQuiz} style={submitBtnStyle}>Finish Quiz & View Score</button>
         </div>
@@ -196,6 +232,7 @@ const ViewQuestions = () => {
             <div style={statStyle}><span>✅ Correct:</span> <strong style={{color: '#10b981'}}>{report.correct}</strong></div>
             <div style={statStyle}><span>❌ Incorrect:</span> <strong style={{color: '#ef4444'}}>{report.wrong}</strong></div>
             <div style={statStyle}><span>🔘 Skipped:</span> <strong style={{color: '#b45309'}}>{report.skipped}</strong></div>
+            <div style={statStyle}><span>⏱ Time Taken:</span> <strong>{Math.floor(Math.floor((Date.now() - startTime)/1000)/60)}m {Math.floor((Date.now() - startTime)/1000)%60}s</strong></div>
             <div style={scoreBadge}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
             <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '25px' }}>Go Back to List</button>
           </div>
@@ -205,6 +242,7 @@ const ViewQuestions = () => {
   );
 };
 
+// Styles (No changes needed in styles as logic is handled in render)
 const centerMsg = { padding: '100px', textAlign: 'center', color: '#64748b' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: '600' };
