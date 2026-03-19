@@ -21,85 +21,125 @@ const ViewQuestions = () => {
 
   // Voice States
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechType, setSpeechType] = useState(null); 
   const [showPlayer, setShowPlayer] = useState(false);
-  const isManuallyStopped = useRef(false); 
-  const isNavigating = useRef(false); 
-  const rateRef = useRef(1); 
+  const [playbackRate, setPlaybackRate] = useState(1); 
+  const [repeatMode, setRepeatMode] = useState(false); 
+
+  // Refs for Speech Engine
+  const activeSpeechId = useRef(0);
+  const rateRef = useRef(1);
+  const isManuallyStopped = useRef(true);
+  const repeatCountRef = useRef(0); 
+  const isRepeatActiveRef = useRef(false);
 
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
-  // Smooth Timer Logic
+  // Timer Logic (From first code)
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
-      if (timeLeft <= 0) {
-        handleNextOrFinish();
-        return;
-      }
-      
-      timerRef.current = setTimeout(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
+      if (timeLeft <= 0) { handleNextOrFinish(); return; }
+      timerRef.current = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
     }
     return () => clearTimeout(timerRef.current);
   }, [timeLeft, currentQIndex, mode, showModal, testData]);
 
-  // Practice Mode: Auto-select
   useEffect(() => {
     if (testData && mode === 'practice') {
       const autoSelect = {};
-      testData.questions.forEach((q, index) => {
-        autoSelect[index] = parseInt(q.answer);
-      });
+      testData.questions.forEach((q, index) => autoSelect[index] = parseInt(q.answer));
       setUserSelections(autoSelect);
     }
   }, [testData, mode]);
 
-  const stopSpeech = () => {
-    isManuallyStopped.current = true; 
+  // --- SPEECH ENGINE ---
+  const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-  };
-
-  const speakSequence = (index) => {
-    if (!testData || index < 0 || index >= testData.questions.length || isManuallyStopped.current) {
-      setIsSpeaking(false);
-      return;
+    
+    if (isNewStart) {
+      activeSpeechId.current++;
+      repeatCountRef.current = 0; 
     }
-
-    window.speechSynthesis.cancel();
+    
+    const currentId = activeSpeechId.current;
+    isManuallyStopped.current = false;
+    setSpeechType(type);
     setCurrentQIndex(index);
     setIsSpeaking(true);
 
     const element = document.getElementById(`q-card-${index}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     const q = testData.questions[index];
-    const labels = ["A", "B", "C", "D"];
-    const options = [q.a, q.b, q.c, q.d];
-    const correctIdx = parseInt(q.answer);
-
-    const textToSpeak = `अगला क्वेश्चन है, ${q.question}. ए, ${q.a}. बी, ${q.b}. सी, ${q.c}. डी, ${q.d}. सही आंसर है, ${labels[correctIdx]}, ${options[correctIdx]}.`;
+    let textToSpeak = "";
     
+    if (type === 'mcq') {
+      const labels = ["ए", "बी", "सी", "डी"];
+      const options = [q.a, q.b, q.c, q.d];
+      textToSpeak = `अगला क्वेश्चन है, ${q.question}. ए, ${q.a}. बी, ${q.b}. सी, ${q.c}. डी, ${q.d}. सही आंसर है, ${labels[parseInt(q.answer)]}, ${options[parseInt(q.answer)]}.`;
+    } else {
+      const options = [q.a, q.b, q.c, q.d];
+      textToSpeak = `अगला क्वेश्चन है, ${q.question}. सही आंसर है, ${options[parseInt(q.answer)]}.`;
+    }
+
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = 'hi-IN';
     utterance.rate = rateRef.current;
 
     utterance.onend = () => {
-      if (isNavigating.current || isManuallyStopped.current) return;
-      if (index + 1 < testData.questions.length) {
-        setTimeout(() => {
-          if (!isManuallyStopped.current && !isNavigating.current) {
-            speakSequence(index + 1);
+      if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
+        if (type === 'oneliner' && isRepeatActiveRef.current && repeatCountRef.current < 1) {
+          repeatCountRef.current++;
+          setTimeout(() => {
+            if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
+               startSpeechEngine(index, type, false); 
+            }
+          }, 600);
+        } else {
+          if (index + 1 < testData.questions.length) {
+            setTimeout(() => {
+              if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
+                repeatCountRef.current = 0; 
+                startSpeechEngine(index + 1, type, true); 
+              }
+            }, 900);
+          } else {
+            setIsSpeaking(false);
           }
-        }, 800);
-      } else {
-        setIsSpeaking(false);
+        }
       }
     };
     window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeech = () => {
+    isManuallyStopped.current = true;
+    activeSpeechId.current++;
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  const handleRateChange = (e) => {
+    const newRate = parseFloat(e.target.value);
+    setPlaybackRate(newRate);
+    rateRef.current = newRate;
+    if (isSpeaking) startSpeechEngine(currentQIndex, speechType, true);
+  };
+
+  const toggleRepeatMode = () => {
+    const nextState = !repeatMode;
+    setRepeatMode(nextState);
+    isRepeatActiveRef.current = nextState;
+    if (isSpeaking && speechType === 'oneliner') {
+      setTimeout(() => startSpeechEngine(currentQIndex, 'oneliner', true), 50);
+    }
+  };
+
+  const handleNextPrev = (newIndex) => {
+    if (newIndex >= 0 && newIndex < testData.questions.length) {
+      startSpeechEngine(newIndex, speechType, true);
+    }
   };
 
   const handleNextOrFinish = () => {
@@ -113,14 +153,11 @@ const ViewQuestions = () => {
 
   const handleOptionClick = (qIdx, selectedIdx) => {
     if (mode === 'practice' || ((mode === 'exam' || mode === 'timer') && userSelections[qIdx] !== undefined)) return;
-    
     if (selectedIdx === parseInt(testData.questions[qIdx].answer)) {
       confetti({ particleCount: 100, spread: 70, origin: { y: 0.8 } });
     }
-
     const updatedSelections = { ...userSelections, [qIdx]: selectedIdx };
     setUserSelections(updatedSelections);
-
     if (mode === 'timer') {
       setTimeout(() => {
         if (qIdx < testData.questions.length - 1) {
@@ -139,7 +176,6 @@ const ViewQuestions = () => {
     const totalSecondsTaken = Math.floor((endTime - startTime) / 1000);
     const report = generateReport(latestData);
     const labels = ["A", "B", "C", "D"];
-    
     const userAnswersArray = testData.questions.map((_, idx) => {
         const selectedIdx = latestData[idx];
         return selectedIdx !== undefined ? labels[selectedIdx] : "";
@@ -152,50 +188,31 @@ const ViewQuestions = () => {
       const updatedTest = { 
         ...testData, 
         latestScore: { 
-          correct: report.correct, 
-          wrong: report.wrong, 
-          skipped: report.skipped,
-          total: report.total,
-          userAnswers: userAnswersArray, 
-          timeTaken: totalSecondsTaken,
+          correct: report.correct, wrong: report.wrong, skipped: report.skipped,
+          total: report.total, userAnswers: userAnswersArray, timeTaken: totalSecondsTaken,
           date: new Date().toISOString()
         } 
       };
       await store.put(updatedTest);
       setShowModal(true);
-    } catch (err) {
-      setShowModal(true);
-    }
+    } catch (err) { setShowModal(true); }
   };
 
   const generateReport = (currentSelections = userSelections) => {
     if (!testData) return null;
-    let correct = 0; 
-    let wrong = 0;
+    let correct = 0; let wrong = 0;
     const total = testData.questions.length;
-    
     testData.questions.forEach((q, idx) => {
       if (currentSelections[idx] !== undefined) {
-        if (currentSelections[idx] === parseInt(q.answer)) {
-          correct++;
-        } else {
-          wrong++;
-        }
+        if (currentSelections[idx] === parseInt(q.answer)) correct++;
+        else wrong++;
       }
     });
-    
-    return { 
-      correct, 
-      wrong, 
-      skipped: total - (correct + wrong), 
-      total 
-    };
+    return { correct, wrong, skipped: total - (correct + wrong), total };
   };
 
   const report = generateReport();
-
   if (loading || !testData) return <div style={centerMsg}>Loading...</div>;
-
   const q = testData.questions[currentQIndex];
 
   return (
@@ -203,26 +220,27 @@ const ViewQuestions = () => {
       <div style={{ padding: '0 20px', position: 'relative' }}>
         <button onClick={() => { stopSpeech(); navigate(-1); }} style={backBtnStyle}>← Back</button>
         
-        {mode === 'timer' && (
+        {/* Timer Box (From first code) */}
+        {mode === 'timer' && !showModal && (
           <div style={timerBoxStyle}>
             <span style={{fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b'}}>TIME LEFT</span>
             <span style={{
-              fontSize: '1.5rem', 
-              fontWeight: '700',
-              transition: 'color 0.3s ease, transform 0.3s ease',
-              color: timeLeft <= 5 ? '#ef4444' : '#1e293b',
-              transform: timeLeft <= 5 ? 'scale(1.1)' : 'scale(1)'
+              fontSize: '1.5rem', fontWeight: '700', color: timeLeft <= 5 ? '#ef4444' : '#1e293b'
             }}>{timeLeft}s</span>
           </div>
         )}
 
         {mode === 'practice' && (
-          <button 
-            onClick={() => { setShowPlayer(true); if(!isSpeaking) speakSequence(currentQIndex); }} 
-            style={speakerBtnStyle}
-          >
-            {isSpeaking ? '🔊' : '🔈'}
-          </button>
+          <div style={voiceControlsHeader}>
+            <button 
+              onClick={() => { setRepeatMode(false); isRepeatActiveRef.current = false; setShowPlayer(true); startSpeechEngine(currentQIndex, 'oneliner', true); }} 
+              style={{...voiceBtn, backgroundColor: speechType === 'oneliner' ? '#3b82f6' : '#fff', color: speechType === 'oneliner' ? '#fff' : '#3b82f6'}}
+            >One-Liner</button>
+            <button 
+              onClick={() => { setRepeatMode(false); isRepeatActiveRef.current = false; setShowPlayer(true); startSpeechEngine(currentQIndex, 'mcq', true); }} 
+              style={{...voiceBtn, backgroundColor: speechType === 'mcq' ? '#3b82f6' : '#fff', color: speechType === 'mcq' ? '#fff' : '#3b82f6'}}
+            >MCQ</button>
+          </div>
         )}
 
         <header style={headerStyle}>
@@ -247,7 +265,6 @@ const ViewQuestions = () => {
               border: isActive ? '2px solid #3b82f6' : '1px solid #e2e8f0',
               backgroundColor: isActive ? '#f0f9ff' : '#fff'
             }}>
-              {/* यहाँ प्रश्न का रंग लाल (Red) किया गया है */}
               <h3 style={questionTextStyle}><span style={{color: '#3b82f6'}}>{qIdx + 1}.</span> {item.question}</h3>
               <div style={optionsGridStyle}>
                 {[item.a, item.b, item.c, item.d].map((opt, oIdx) => {
@@ -273,6 +290,7 @@ const ViewQuestions = () => {
         })}
       </div>
 
+      {/* Sticky Footer for Exam/Timer (From first code) */}
       {mode !== 'practice' && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
         <div style={stickyFooterStyle}>
           <button onClick={() => handleFinishQuiz()} style={submitBtnStyle}>Finish Quiz & View Score</button>
@@ -281,27 +299,30 @@ const ViewQuestions = () => {
 
       {showPlayer && mode === 'practice' && (
         <div style={playerCardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Player Q{currentQIndex + 1} of {testData.questions.length}</span>
             <button onClick={() => { stopSpeech(); setShowPlayer(false); }} style={closeBtnStyle}>✕</button>
           </div>
+          <div style={{ marginBottom: '10px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '15px' }}>
+             <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
+               <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 'bold' }}>SPEED:</span>
+               <select value={playbackRate} onChange={handleRateChange} style={speedSelectStyle}>
+                  <option value="0.5">0.5x</option><option value="0.75">0.75x</option><option value="1">1x</option>
+                  <option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
+               </select>
+             </div>
+             {speechType === 'oneliner' && (
+               <button onClick={toggleRepeatMode} style={{ ...repeatBtnStyle, backgroundColor: repeatMode ? '#ef4444' : '#f1f5f9', color: repeatMode ? '#fff' : '#475569' }}>
+                 Repeat 2x: {repeatMode ? "ON" : "OFF"}
+               </button>
+             )}
+          </div>
           <div style={playerControlsRow}>
-            <button disabled={isFirstQ} onClick={() => { 
-                isNavigating.current = true; window.speechSynthesis.cancel(); 
-                setTimeout(() => { isNavigating.current = false; speakSequence(currentQIndex - 1); }, 400); 
-              }} style={{...playerSmallBtn, opacity: isFirstQ ? 0.3 : 1}}>Prev</button>
-            
-            <button onClick={() => { 
-                if (isSpeaking) { stopSpeech(); } 
-                else { isManuallyStopped.current = false; speakSequence(currentQIndex); }
-            }} style={playerMainBtn}>
+            <button disabled={isFirstQ} onClick={() => handleNextPrev(currentQIndex - 1)} style={{...playerSmallBtn, opacity: isFirstQ ? 0.3 : 1}}>Prev</button>
+            <button onClick={() => { if (isSpeaking) stopSpeech(); else startSpeechEngine(currentQIndex, speechType || 'oneliner', true); }} style={playerMainBtn}>
                 {isSpeaking ? 'STOP' : 'RESUME'}
             </button>
-
-            <button disabled={isLastQ} onClick={() => { 
-                isNavigating.current = true; window.speechSynthesis.cancel(); 
-                setTimeout(() => { isNavigating.current = false; speakSequence(currentQIndex + 1); }, 400); 
-              }} style={{...playerSmallBtn, opacity: isLastQ ? 0.3 : 1}}>Next</button>
+            <button disabled={isLastQ} onClick={() => handleNextPrev(currentQIndex + 1)} style={{...playerSmallBtn, opacity: isLastQ ? 0.3 : 1}}>Next</button>
           </div>
         </div>
       )}
@@ -310,9 +331,9 @@ const ViewQuestions = () => {
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
             <h2 style={{marginBottom: '20px', color: '#1e293b'}}>Quiz Result</h2>
-            <div style={statStyle}><span style={{color: '#10b981', fontWeight: '500'}}>✅ Correct:</span> <strong>{report.correct}</strong></div>
-            <div style={statStyle}><span style={{color: '#ef4444', fontWeight: '500'}}>❌ Incorrect:</span> <strong>{report.wrong}</strong></div>
-            <div style={statStyle}><span style={{color: '#94a3b8', fontWeight: '500'}}>⚪ Skipped:</span> <strong>{report.skipped}</strong></div>
+            <div style={statStyle}>✅ Correct: <strong>{report.correct}</strong></div>
+            <div style={statStyle}>❌ Incorrect: <strong>{report.wrong}</strong></div>
+            <div style={statStyle}>⚪ Skipped: <strong>{report.skipped}</strong></div>
             <div style={scoreBadge}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
             <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '20px' }}>Go Back</button>
           </div>
@@ -326,28 +347,28 @@ const ViewQuestions = () => {
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' };
-const speakerBtnStyle = { position: 'absolute', top: '20px', right: '20px', fontSize: '1.4rem', background: '#fff', border: '2px solid #3b82f6', borderRadius: '50%', width: '45px', height: '45px', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 4px 10px rgba(59, 130, 246, 0.2)' };
+const voiceControlsHeader = { position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '8px' };
+const voiceBtn = { padding: '8px 12px', borderRadius: '12px', border: '2px solid #3b82f6', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' };
 const headerStyle = { borderBottom: '2px solid #e2e8f0', margin: '15px 0', paddingBottom: '10px' };
-const questionCardStyle = { marginBottom: '20px', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0', transition: 'all 0.3s ease' };
-
-// यहाँ प्रश्न का रंग लाल (Red) किया गया है
+const questionCardStyle = { marginBottom: '20px', padding: '15px', borderRadius: '16px', border: '1px solid #e2e8f0' };
 const questionTextStyle = { fontSize: '1rem', fontWeight: '600', marginBottom: '12px', color: '#ef4444' };
-
 const optionsGridStyle = { display: 'grid', gap: '8px' };
-const optionItemStyle = { padding: '12px', border: '2px solid', borderRadius: '10px', fontSize: '0.9rem', transition: 'all 0.2s ease' };
+const optionItemStyle = { padding: '12px', border: '2px solid', borderRadius: '10px', fontSize: '0.9rem' };
 const timerBoxStyle = { position: 'absolute', top: '15px', right: '20px', backgroundColor: '#fff', padding: '8px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
 const stickyFooterStyle = { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '800px', backgroundColor: '#fff', padding: '15px', boxShadow: '0 -5px 15px rgba(0,0,0,0.05)', zIndex: 99 };
-const submitBtnStyle = { width: '100%', padding: '15px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer' };
+const submitBtnStyle = { width: '100%', padding: '15px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '12px', fontWeight: 'bold', border: 'none' };
 const playerCardStyle = { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', width: '92%', maxWidth: '400px', backgroundColor: '#fff', borderRadius: '24px', padding: '18px', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)', zIndex: 1000, border: '1px solid #e2e8f0' };
+const speedSelectStyle = { padding: '4px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem' };
+const repeatBtnStyle = { padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.75rem', fontWeight: 'bold' };
 const playerControlsRow = { display: 'flex', justifyContent: 'space-between', margin: '12px 0', alignItems: 'center' };
-const playerMainBtn = { padding: '10px 30px', borderRadius: '25px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold', cursor: 'pointer' };
-const playerSmallBtn = { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 14px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' };
+const playerMainBtn = { padding: '10px 30px', borderRadius: '25px', border: 'none', backgroundColor: '#1e293b', color: '#fff', fontWeight: 'bold' };
+const playerSmallBtn = { background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 14px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' };
 const closeBtnStyle = { border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem', color: '#94a3b8' };
 const modeBadgeStyle = (mode) => ({ padding: '4px 10px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold', backgroundColor: mode === 'practice' ? '#dcfce7' : mode === 'timer' ? '#ffedd5' : '#dbeafe', color: mode === 'practice' ? '#166534' : mode === 'timer' ? '#9a3412' : '#1e40af' });
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
 const modalContentStyle = { backgroundColor: '#fff', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '350px' };
 const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' };
 const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '10px', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px' };
-const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none', cursor: 'pointer' };
+const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none' };
 
 export default ViewQuestions;
