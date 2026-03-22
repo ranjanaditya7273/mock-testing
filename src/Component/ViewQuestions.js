@@ -36,7 +36,7 @@ const ViewQuestions = () => {
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
-  // Timer Logic (From first code)
+  // Timer Logic
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
       if (timeLeft <= 0) { handleNextOrFinish(); return; }
@@ -53,7 +53,7 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
-  // --- SPEECH ENGINE ---
+  // --- SPEECH ENGINE (REFINED FOR DEEPER & CONTINUOUS VOICE) ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
     
@@ -74,18 +74,32 @@ const ViewQuestions = () => {
     const q = testData.questions[index];
     let textToSpeak = "";
     
+    // टेक्स्ट को क्लीन रखा गया है ताकि AI अटके नहीं (No extra dots/commas)
     if (type === 'mcq') {
       const labels = ["ए", "बी", "सी", "डी"];
       const options = [q.a, q.b, q.c, q.d];
-      textToSpeak = `अगला क्वेश्चन है, ${q.question}. ए, ${q.a}. बी, ${q.b}. सी, ${q.c}. डी, ${q.d}. सही आंसर है, ${labels[parseInt(q.answer)]}, ${options[parseInt(q.answer)]}.`;
+      textToSpeak = `अगला प्रश्न है ${q.question}. ए ${q.a}. बी ${q.b}. सी ${q.c}. डी ${q.d}. सही उत्तर है विकल्प ${labels[parseInt(q.answer)]} ${options[parseInt(q.answer)]}.`;
     } else {
       const options = [q.a, q.b, q.c, q.d];
-      textToSpeak = `अगला क्वेश्चन है, ${q.question}. सही आंसर है, ${options[parseInt(q.answer)]}.`;
+      textToSpeak = `अगला प्रश्न है ${q.question}. सही उत्तर है ${options[parseInt(q.answer)]}.`;
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = 'hi-IN';
-    utterance.rate = rateRef.current;
+    
+    // Male Voice Logic
+    const voices = window.speechSynthesis.getVoices();
+    const maleVoice = voices.find(v => 
+      (v.lang.includes('hi')) && 
+      (v.name.toLowerCase().includes('male') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('hemant'))
+    ) || voices.find(v => v.lang.includes('hi'));
+    
+    if (maleVoice) utterance.voice = maleVoice;
+    
+    // पिच को 0.7 किया गया है (और भी भारी आवाज़ के लिए) 
+    // रेट को 0.95 रखा है ताकि आवाज़ लगातार और नेचुरल लगे
+    utterance.pitch = 0.4; 
+    utterance.rate = rateRef.current * 0.90;
 
     utterance.onend = () => {
       if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
@@ -103,7 +117,7 @@ const ViewQuestions = () => {
                 repeatCountRef.current = 0; 
                 startSpeechEngine(index + 1, type, true); 
               }
-            }, 900);
+            }, 800);
           } else {
             setIsSpeaking(false);
           }
@@ -220,7 +234,6 @@ const ViewQuestions = () => {
       <div style={{ padding: '0 20px', position: 'relative' }}>
         <button onClick={() => { stopSpeech(); navigate(-1); }} style={backBtnStyle}>← Back</button>
         
-        {/* Timer Box (From first code) */}
         {mode === 'timer' && !showModal && (
           <div style={timerBoxStyle}>
             <span style={{fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b'}}>TIME LEFT</span>
@@ -290,7 +303,6 @@ const ViewQuestions = () => {
         })}
       </div>
 
-      {/* Sticky Footer for Exam/Timer (From first code) */}
       {mode !== 'practice' && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
         <div style={stickyFooterStyle}>
           <button onClick={() => handleFinishQuiz()} style={submitBtnStyle}>Finish Quiz & View Score</button>
