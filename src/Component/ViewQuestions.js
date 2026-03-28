@@ -36,7 +36,6 @@ const ViewQuestions = () => {
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
-  // --- CORE FIX 1: Initial Flush & Voice Pre-loading ---
   useEffect(() => {
     window.speechSynthesis.cancel(); 
     const loadVoices = () => window.speechSynthesis.getVoices();
@@ -48,7 +47,6 @@ const ViewQuestions = () => {
     };
   }, []);
 
-  // Timer Logic
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
       if (timeLeft <= 0) { handleNextOrFinish(); return; }
@@ -65,7 +63,7 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
-  // --- SPEECH ENGINE ---
+  // --- UPDATED SPEECH ENGINE WITH EXPLANATION ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
     
@@ -86,13 +84,15 @@ const ViewQuestions = () => {
     const q = testData.questions[index];
     let textToSpeak = "";
     
+    const labels = ["ए", "बी", "सी", "डी"];
+    const options = [q.a, q.b, q.c, q.d];
+    const correctAnswerText = options[parseInt(q.answer)];
+    const explanationText = q.explanation ? `इसकी व्याख्या है, ${q.explanation}` : "";
+
     if (type === 'mcq') {
-      const labels = ["ए", "बी", "सी", "डी"];
-      const options = [q.a, q.b, q.c, q.d];
-      textToSpeak = `अगला प्रश्न है ${q.question}. ए ${q.a}. बी ${q.b}. सी ${q.c}. डी ${q.d}. सही उत्तर है विकल्प ${labels[parseInt(q.answer)]} ${options[parseInt(q.answer)]}.`;
+      textToSpeak = `प्रश्न संख्या ${index + 1}. ${q.question}. विकल्प ए, ${q.a}. विकल्प बी, ${q.b}. विकल्प सी, ${q.c}. विकल्प डी, ${q.d}. सही उत्तर है विकल्प ${labels[parseInt(q.answer)]}, ${correctAnswerText}. ${explanationText}`;
     } else {
-      const options = [q.a, q.b, q.c, q.d];
-      textToSpeak = `अगला प्रश्न है ${q.question}. सही उत्तर है ${options[parseInt(q.answer)]}.`;
+      textToSpeak = `प्रश्न. ${q.question}. सही उत्तर है, ${correctAnswerText}. ${explanationText}`;
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -106,26 +106,28 @@ const ViewQuestions = () => {
     
     if (maleVoice) utterance.voice = maleVoice;
     
-    utterance.pitch = 0.7; 
+    utterance.pitch = 0.8; 
     utterance.rate = rateRef.current * 0.95;
 
     utterance.onend = () => {
       if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
+        // Repeat logic for One-Liner
         if (type === 'oneliner' && isRepeatActiveRef.current && repeatCountRef.current < 1) {
           repeatCountRef.current++;
           setTimeout(() => {
             if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
-               startSpeechEngine(index, type, false); 
+                startSpeechEngine(index, type, false); 
             }
-          }, 600);
+          }, 800);
         } else {
+          // Move to next question automatically
           if (index + 1 < testData.questions.length) {
             setTimeout(() => {
               if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
                 repeatCountRef.current = 0; 
                 startSpeechEngine(index + 1, type, true); 
               }
-            }, 1200); 
+            }, 1500); 
           } else {
             setIsSpeaking(false);
           }
@@ -310,7 +312,6 @@ const ViewQuestions = () => {
                 })}
               </div>
 
-              {/* --- UPDATED: EXPLANATION BOX (VISIBLE IN PRACTICE MODE OR AFTER FINISHING QUIZ) --- */}
               {(mode === 'practice' || isAnswered || (showModal && mode !== 'practice')) && item.explanation && (
                 <div style={explanationBoxStyle}>
                   <strong style={{ display: 'block', marginBottom: '6px', color: '#854d0e', fontSize: '0.85rem' }}>
@@ -377,7 +378,7 @@ const ViewQuestions = () => {
   );
 };
 
-// --- Styles ---
+// --- Styles unchanged ---
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' };
