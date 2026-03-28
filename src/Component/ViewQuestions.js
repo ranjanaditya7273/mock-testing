@@ -276,8 +276,8 @@ const ViewQuestions = () => {
       </div>
 
       <div style={{ padding: '0 20px 200px 20px' }}>
-        {(mode === 'timer' ? [q] : testData.questions).map((item, idx) => {
-          const qIdx = mode === 'timer' ? currentQIndex : idx;
+        {(mode === 'timer' && !showModal ? [q] : testData.questions).map((item, idx) => {
+          const qIdx = (mode === 'timer' && !showModal) ? currentQIndex : idx;
           const isAnswered = userSelections[qIdx] !== undefined;
           const selectedIdx = userSelections[qIdx];
           const correctIdx = parseInt(item.answer);
@@ -301,7 +301,7 @@ const ViewQuestions = () => {
                     <div key={oIdx} onClick={() => handleOptionClick(qIdx, oIdx)} style={{
                         ...optionItemStyle, backgroundColor: bgColor, borderColor: borderColor, color: textColor,
                         cursor: (mode === 'practice' || isAnswered) ? 'default' : 'pointer',
-                        pointerEvents: mode === 'practice' ? 'none' : 'auto',
+                        pointerEvents: (mode === 'practice' || isAnswered) ? 'none' : 'auto',
                         opacity: (mode === 'practice' && oIdx !== correctIdx) ? 0.7 : 1
                       }}>
                       <strong>{String.fromCharCode(65+oIdx)})</strong> {opt}
@@ -310,8 +310,8 @@ const ViewQuestions = () => {
                 })}
               </div>
 
-              {/* --- NEW: EXPLANATION BOX (ONLY IN PRACTICE MODE) --- */}
-              {mode === 'practice' && item.explanation && (
+              {/* --- UPDATED: EXPLANATION BOX (VISIBLE IN PRACTICE MODE OR AFTER FINISHING QUIZ) --- */}
+              {(mode === 'practice' || isAnswered || (showModal && mode !== 'practice')) && item.explanation && (
                 <div style={explanationBoxStyle}>
                   <strong style={{ display: 'block', marginBottom: '6px', color: '#854d0e', fontSize: '0.85rem' }}>
                     💡 Explanation:
@@ -324,7 +324,7 @@ const ViewQuestions = () => {
         })}
       </div>
 
-      {mode !== 'practice' && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
+      {mode !== 'practice' && !showModal && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
         <div style={stickyFooterStyle}>
           <button onClick={() => handleFinishQuiz()} style={submitBtnStyle}>Finish Quiz & View Score</button>
         </div>
@@ -368,7 +368,8 @@ const ViewQuestions = () => {
             <div style={statStyle}>❌ Incorrect: <strong>{report.wrong}</strong></div>
             <div style={statStyle}>⚪ Skipped: <strong>{report.skipped}</strong></div>
             <div style={scoreBadge}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
-            <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '20px' }}>Go Back</button>
+            <button onClick={() => setShowModal(false)} style={{ ...doneBtnStyle, marginTop: '20px', backgroundColor: '#10b981' }}>Review Answers</button>
+            <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '10px' }}>Go Back</button>
           </div>
         </div>
       )}
@@ -402,9 +403,8 @@ const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', h
 const modalContentStyle = { backgroundColor: '#fff', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '350px' };
 const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' };
 const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '10px', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px' };
-const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none' };
+const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none', cursor: 'pointer' };
 
-// Explanation Box Style
 const explanationBoxStyle = {
   marginTop: '15px',
   padding: '12px 16px',
