@@ -36,6 +36,18 @@ const ViewQuestions = () => {
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
+  // --- CORE FIX 1: Initial Flush & Voice Pre-loading ---
+  useEffect(() => {
+    window.speechSynthesis.cancel(); // पुराने बफर को साफ़ करना
+    const loadVoices = () => window.speechSynthesis.getVoices();
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
   // Timer Logic
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
@@ -53,7 +65,7 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
-  // --- SPEECH ENGINE (REFINED FOR DEEPER & CONTINUOUS VOICE) ---
+  // --- SPEECH ENGINE (With Core Fixes) ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
     
@@ -74,7 +86,7 @@ const ViewQuestions = () => {
     const q = testData.questions[index];
     let textToSpeak = "";
     
-    // टेक्स्ट को क्लीन रखा गया है ताकि AI अटके नहीं (No extra dots/commas)
+    // आपका ओरिजिनल बोलने का तरीका (Unchanged)
     if (type === 'mcq') {
       const labels = ["ए", "बी", "सी", "डी"];
       const options = [q.a, q.b, q.c, q.d];
@@ -87,7 +99,6 @@ const ViewQuestions = () => {
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.lang = 'hi-IN';
     
-    // Male Voice Logic
     const voices = window.speechSynthesis.getVoices();
     const maleVoice = voices.find(v => 
       (v.lang.includes('hi')) && 
@@ -96,8 +107,6 @@ const ViewQuestions = () => {
     
     if (maleVoice) utterance.voice = maleVoice;
     
-    // पिच को 0.7 किया गया है (और भी भारी आवाज़ के लिए) 
-    // रेट को 0.95 रखा है ताकि आवाज़ लगातार और नेचुरल लगे
     utterance.pitch = 0.7; 
     utterance.rate = rateRef.current * 0.95;
 
@@ -112,19 +121,24 @@ const ViewQuestions = () => {
           }, 600);
         } else {
           if (index + 1 < testData.questions.length) {
+            // --- CORE FIX 4: Extended Wait Time for Stability ---
             setTimeout(() => {
               if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
                 repeatCountRef.current = 0; 
                 startSpeechEngine(index + 1, type, true); 
               }
-            }, 800);
+            }, 1200); // 800 से बढ़ाकर 1200 किया
           } else {
             setIsSpeaking(false);
           }
         }
       }
     };
-    window.speechSynthesis.speak(utterance);
+
+    // --- CORE FIX 3: 50ms Stability Delay before Speaking ---
+    setTimeout(() => {
+      window.speechSynthesis.speak(utterance);
+    }, 50);
   };
 
   const stopSpeech = () => {
@@ -355,7 +369,7 @@ const ViewQuestions = () => {
   );
 };
 
-// Styles
+// Styles (Unchanged)
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' };
