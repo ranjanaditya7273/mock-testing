@@ -98,8 +98,8 @@ const ViewQuestions = () => {
     
     // पिच को 0.7 किया गया है (और भी भारी आवाज़ के लिए) 
     // रेट को 0.95 रखा है ताकि आवाज़ लगातार और नेचुरल लगे
-    utterance.pitch = 0.4; 
-    utterance.rate = rateRef.current * 0.90;
+    utterance.pitch = 0.7; 
+    utterance.rate = rateRef.current * 0.95;
 
     utterance.onend = () => {
       if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
