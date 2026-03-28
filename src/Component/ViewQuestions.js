@@ -38,7 +38,7 @@ const ViewQuestions = () => {
 
   // --- CORE FIX 1: Initial Flush & Voice Pre-loading ---
   useEffect(() => {
-    window.speechSynthesis.cancel(); // पुराने बफर को साफ़ करना
+    window.speechSynthesis.cancel(); 
     const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
@@ -65,7 +65,7 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
-  // --- SPEECH ENGINE (With Core Fixes) ---
+  // --- SPEECH ENGINE ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
     
@@ -86,7 +86,6 @@ const ViewQuestions = () => {
     const q = testData.questions[index];
     let textToSpeak = "";
     
-    // आपका ओरिजिनल बोलने का तरीका (Unchanged)
     if (type === 'mcq') {
       const labels = ["ए", "बी", "सी", "डी"];
       const options = [q.a, q.b, q.c, q.d];
@@ -121,13 +120,12 @@ const ViewQuestions = () => {
           }, 600);
         } else {
           if (index + 1 < testData.questions.length) {
-            // --- CORE FIX 4: Extended Wait Time for Stability ---
             setTimeout(() => {
               if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
                 repeatCountRef.current = 0; 
                 startSpeechEngine(index + 1, type, true); 
               }
-            }, 1200); // 800 से बढ़ाकर 1200 किया
+            }, 1200); 
           } else {
             setIsSpeaking(false);
           }
@@ -135,7 +133,6 @@ const ViewQuestions = () => {
       }
     };
 
-    // --- CORE FIX 3: 50ms Stability Delay before Speaking ---
     setTimeout(() => {
       window.speechSynthesis.speak(utterance);
     }, 50);
@@ -312,6 +309,16 @@ const ViewQuestions = () => {
                   );
                 })}
               </div>
+
+              {/* --- NEW: EXPLANATION BOX (ONLY IN PRACTICE MODE) --- */}
+              {mode === 'practice' && item.explanation && (
+                <div style={explanationBoxStyle}>
+                  <strong style={{ display: 'block', marginBottom: '6px', color: '#854d0e', fontSize: '0.85rem' }}>
+                    💡 Explanation:
+                  </strong>
+                  {item.explanation}
+                </div>
+              )}
             </div>
           );
         })}
@@ -369,7 +376,7 @@ const ViewQuestions = () => {
   );
 };
 
-// Styles (Unchanged)
+// --- Styles ---
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' };
@@ -396,5 +403,19 @@ const modalContentStyle = { backgroundColor: '#fff', padding: '30px', borderRadi
 const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' };
 const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '10px', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px' };
 const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none' };
+
+// Explanation Box Style
+const explanationBoxStyle = {
+  marginTop: '15px',
+  padding: '12px 16px',
+  backgroundColor: '#fefce8', 
+  borderLeft: '4px solid #eab308',
+  borderRadius: '8px',
+  fontSize: '0.92rem',
+  color: '#422006',
+  lineHeight: '1.6',
+  whiteSpace: 'pre-wrap', 
+  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+};
 
 export default ViewQuestions;

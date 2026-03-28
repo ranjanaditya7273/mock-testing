@@ -28,17 +28,21 @@ const HomeQuiz = ({ setCategories }) => {
     cat.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // --- UPDATED PARSER TO HANDLE EXPLANATION ---
   const parseRawText = (text) => {
     if (!text) return [];
     const lines = text.split('\n');
     const parsedQuestions = [];
     let currentQ = {};
+    let collectingExplanation = false;
 
     lines.forEach((line) => {
       const trimmedLine = line.trim();
+      
       if (trimmedLine.startsWith('Q:')) {
         if (currentQ.question) parsedQuestions.push(currentQ);
-        currentQ = { question: trimmedLine.replace('Q:', '').trim() };
+        currentQ = { question: trimmedLine.replace('Q:', '').trim(), explanation: "" };
+        collectingExplanation = false;
       } else if (trimmedLine.startsWith('A)')) {
         currentQ.a = trimmedLine.replace('A)', '').trim();
       } else if (trimmedLine.startsWith('B)')) {
@@ -49,6 +53,12 @@ const HomeQuiz = ({ setCategories }) => {
         currentQ.d = trimmedLine.replace('D)', '').trim();
       } else if (trimmedLine.startsWith('ANS:')) {
         currentQ.answer = trimmedLine.replace('ANS:', '').trim();
+      } else if (trimmedLine.startsWith('Explanation:')) {
+        collectingExplanation = true;
+        currentQ.explanation = trimmedLine.replace('Explanation:', '').trim();
+      } else if (collectingExplanation && trimmedLine !== "") {
+        // If explanation continues on multiple lines
+        currentQ.explanation += (currentQ.explanation ? "\n" : "") + trimmedLine;
       }
     });
     if (currentQ.question) parsedQuestions.push(currentQ);
@@ -79,7 +89,7 @@ const HomeQuiz = ({ setCategories }) => {
         
         existingSectionsRequest.onsuccess = async () => {
           const existingNames = new Set(existingSectionsRequest.result.map(s => s.name));
-          // API data ko order preserve karne ke liye loop karte hain
+          
           for (const quiz of result.data) {
             const questionsArray = parseRawText(quiz.fileContent);
             testStore.put({
@@ -104,7 +114,7 @@ const HomeQuiz = ({ setCategories }) => {
           setShowAdminModal(false);
           setAdminEmail("");
           setAdminPassword("");
-          alert("Cloud data synchronized successfully!");
+          alert("Cloud data synchronized successfully with explanations!");
         };
       } else {
         setLoginError(result.error || "Login Failed");
@@ -116,7 +126,6 @@ const HomeQuiz = ({ setCategories }) => {
     }
   };
 
-  // --- UPDATED: Isse sequence order maintain rahega (First created, first shown) ---
   const loadLocalData = async () => {
     try {
       const db = await openDB();
@@ -125,9 +134,6 @@ const HomeQuiz = ({ setCategories }) => {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        // Hum categories ko unki creation order (default auto-increment ID) ke hisaab se rakhenge
-        // Agar aapko History (Pehle wala) top pe chahiye, toh simple getAll() kaafi hai
-        // Agar ulta ho rha ho toh .reverse() laga sakte hain.
         const savedSections = request.result.map(s => s.name);
         setLocalCategories(savedSections);
         setCategories(savedSections);
@@ -317,7 +323,7 @@ const HomeQuiz = ({ setCategories }) => {
               {loginError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '10px' }}>{loginError}</p>}
               <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
                 <button type="submit" style={saveBtn} disabled={isSyncing}>
-                   {isSyncing ? "Syncing..." : "Verify & Sync"}
+                    {isSyncing ? "Syncing..." : "Verify & Sync"}
                 </button>
                 <button type="button" onClick={() => setShowAdminModal(false)} style={cancelBtn}>Cancel</button>
               </div>
@@ -375,7 +381,7 @@ const HomeQuiz = ({ setCategories }) => {
   );
 };
 
-// --- Styles Same ---
+// --- CSS Styles ---
 const mainContentStyle = { padding: '20px 5% 50px', maxWidth: '1200px', margin: '0 auto' };
 const welcomeHeader = { textAlign: 'center', marginBottom: '25px' };
 const firstTimeBox = { textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '25px', border: '2px dashed #3b82f6', marginTop: '30px' };
