@@ -28,7 +28,7 @@ const HomeQuiz = ({ setCategories }) => {
     cat.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- UPDATED PARSER TO HANDLE EXPLANATION ---
+  // --- PARSER TO HANDLE EXPLANATION ---
   const parseRawText = (text) => {
     if (!text) return [];
     const lines = text.split('\n');
@@ -57,7 +57,6 @@ const HomeQuiz = ({ setCategories }) => {
         collectingExplanation = true;
         currentQ.explanation = trimmedLine.replace('Explanation:', '').trim();
       } else if (collectingExplanation && trimmedLine !== "") {
-        // If explanation continues on multiple lines
         currentQ.explanation += (currentQ.explanation ? "\n" : "") + trimmedLine;
       }
     });
@@ -80,6 +79,12 @@ const HomeQuiz = ({ setCategories }) => {
       const result = await response.json();
 
       if (response.ok && result.success) {
+        if (!result.data || result.data.length === 0) {
+          alert("Cloud पर कोई डेटा नहीं मिला।");
+          setIsSyncing(false);
+          return;
+        }
+
         const db = await openDB();
         const tx = db.transaction(["tests", "sections"], "readwrite");
         const testStore = tx.objectStore("tests");
@@ -87,26 +92,31 @@ const HomeQuiz = ({ setCategories }) => {
 
         const existingSectionsRequest = sectionStore.getAll();
         
-        existingSectionsRequest.onsuccess = async () => {
+        existingSectionsRequest.onsuccess = () => {
           const existingNames = new Set(existingSectionsRequest.result.map(s => s.name));
           
-          for (const quiz of result.data) {
-            const questionsArray = parseRawText(quiz.fileContent);
+          result.data.forEach((quiz) => {
+            const content = quiz.fileContent || ""; 
+            const questionsArray = parseRawText(content);
+            
             testStore.put({
               id: quiz._id,
-              testName: quiz.testName,
-              category: quiz.category,
-              description: quiz.description,
+              testName: quiz.testName || "Untitled Test",
+              category: quiz.category || "General",
+              description: quiz.description || "",
               totalQuestions: quiz.totalQuestions || questionsArray.length,
               questions: questionsArray,
-              createdAt: quiz.createdAt
+              createdAt: quiz.createdAt || new Date().toISOString()
             });
 
             if (quiz.category && !existingNames.has(quiz.category.trim())) {
-              sectionStore.add({ name: quiz.category.trim(), createdAt: new Date(quiz.createdAt).getTime() });
+              sectionStore.add({ 
+                name: quiz.category.trim(), 
+                createdAt: quiz.createdAt ? new Date(quiz.createdAt).getTime() : Date.now() 
+              });
               existingNames.add(quiz.category.trim());
             }
-          }
+          });
         };
 
         tx.oncomplete = () => {
@@ -114,13 +124,20 @@ const HomeQuiz = ({ setCategories }) => {
           setShowAdminModal(false);
           setAdminEmail("");
           setAdminPassword("");
-          alert("Cloud data synchronized successfully with explanations!");
+          alert("Cloud data synchronized successfully!");
         };
+
+        tx.onerror = (err) => {
+          console.error("IndexedDB Error:", err);
+          setLoginError("Local Database Error.");
+        };
+
       } else {
-        setLoginError(result.error || "Login Failed");
+        // यहाँ बैकएंड से 'Data fetch karne mein galti hui' का असली कारण दिखेगा
+        setLoginError(result.details || result.error || "Login Failed");
       }
     } catch (err) {
-      setLoginError("Server Error: Check connection.");
+      setLoginError("Server Connection Error.");
     } finally {
       setIsSyncing(false);
     }
@@ -185,7 +202,7 @@ const HomeQuiz = ({ setCategories }) => {
     setShowModal(true);
   };
 
-  const openDeleteModal = (e, index) => {
+  const openDelModal = (e, index) => {
     e.stopPropagation();
     setDeleteTargetIndex(index);
     setAuthorNameInput("");
@@ -279,7 +296,7 @@ const HomeQuiz = ({ setCategories }) => {
             <DatabaseZap size={50} color="#3b82f6" />
             <h2 style={{ color: '#1e293b', marginTop: '20px' }}>No Content Available!</h2>
             <p style={{ color: '#64748b', maxWidth: '400px', margin: '10px auto', lineHeight: '1.5' }}>
-              Please ask **Admin** to sync the questions from the cloud or use the **Admin Sync** button above to fetch data.
+              Please use the **Admin Sync** button above to fetch data.
             </p>
           </div>
         ) : filteredCategories.length > 0 ? (
@@ -293,7 +310,7 @@ const HomeQuiz = ({ setCategories }) => {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={(e) => openEditModal(e, index, cat)} style={editIconBtn} title="Edit Section"><Edit3 size={18} /></button>
-                  <button onClick={(e) => openDeleteModal(e, index)} style={deleteIconBtn} title="Delete Section"><Trash2 size={18} /></button>
+                  <button onClick={(e) => openDelModal(e, index)} style={deleteIconBtn} title="Delete Section"><Trash2 size={18} /></button>
                 </div>
               </div>
             ))}
@@ -320,7 +337,7 @@ const HomeQuiz = ({ setCategories }) => {
               <input type="email" style={inputStyle} value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="Email address" required />
               <label style={{...labelStyle, marginTop: '15px'}}>Password</label>
               <input type="password" style={inputStyle} value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="Enter Password" required />
-              {loginError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '10px' }}>{loginError}</p>}
+              {loginError && <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '10px', backgroundColor: '#fee2e2', padding: '8px', borderRadius: '5px' }}>{loginError}</p>}
               <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
                 <button type="submit" style={saveBtn} disabled={isSyncing}>
                     {isSyncing ? "Syncing..." : "Verify & Sync"}
