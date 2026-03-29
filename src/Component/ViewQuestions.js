@@ -36,6 +36,7 @@ const ViewQuestions = () => {
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
+  // --- CORE FIX 1: Initial Flush & Voice Pre-loading ---
   useEffect(() => {
     window.speechSynthesis.cancel(); 
     const loadVoices = () => window.speechSynthesis.getVoices();
@@ -47,6 +48,7 @@ const ViewQuestions = () => {
     };
   }, []);
 
+  // Timer Logic
   useEffect(() => {
     if (mode === 'timer' && !showModal && testData) {
       if (timeLeft <= 0) { handleNextOrFinish(); return; }
@@ -63,7 +65,7 @@ const ViewQuestions = () => {
     }
   }, [testData, mode]);
 
-  // --- UPDATED SPEECH ENGINE WITH EXPLANATION ---
+  // --- SPEECH ENGINE ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
     window.speechSynthesis.cancel();
     
@@ -84,15 +86,13 @@ const ViewQuestions = () => {
     const q = testData.questions[index];
     let textToSpeak = "";
     
-    const labels = ["ए", "बी", "सी", "डी"];
-    const options = [q.a, q.b, q.c, q.d];
-    const correctAnswerText = options[parseInt(q.answer)];
-    const explanationText = q.explanation ? `इसकी व्याख्या है, ${q.explanation}` : "";
-
     if (type === 'mcq') {
-      textToSpeak = `प्रश्न संख्या ${index + 1}. ${q.question}. विकल्प ए, ${q.a}. विकल्प बी, ${q.b}. विकल्प सी, ${q.c}. विकल्प डी, ${q.d}. सही उत्तर है विकल्प ${labels[parseInt(q.answer)]}, ${correctAnswerText}. ${explanationText}`;
+      const labels = ["ए", "बी", "सी", "डी"];
+      const options = [q.a, q.b, q.c, q.d];
+      textToSpeak = `अगला प्रश्न है ${q.question}. ए ${q.a}. बी ${q.b}. सी ${q.c}. डी ${q.d}. सही उत्तर है विकल्प ${labels[parseInt(q.answer)]} ${options[parseInt(q.answer)]}.`;
     } else {
-      textToSpeak = `प्रश्न. ${q.question}. सही उत्तर है, ${correctAnswerText}. ${explanationText}`;
+      const options = [q.a, q.b, q.c, q.d];
+      textToSpeak = `अगला प्रश्न है ${q.question}. सही उत्तर है ${options[parseInt(q.answer)]}.`;
     }
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -106,28 +106,26 @@ const ViewQuestions = () => {
     
     if (maleVoice) utterance.voice = maleVoice;
     
-    utterance.pitch = 0.8; 
+    utterance.pitch = 0.7; 
     utterance.rate = rateRef.current * 0.95;
 
     utterance.onend = () => {
       if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
-        // Repeat logic for One-Liner
         if (type === 'oneliner' && isRepeatActiveRef.current && repeatCountRef.current < 1) {
           repeatCountRef.current++;
           setTimeout(() => {
             if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
-                startSpeechEngine(index, type, false); 
+               startSpeechEngine(index, type, false); 
             }
-          }, 800);
+          }, 600);
         } else {
-          // Move to next question automatically
           if (index + 1 < testData.questions.length) {
             setTimeout(() => {
               if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
                 repeatCountRef.current = 0; 
                 startSpeechEngine(index + 1, type, true); 
               }
-            }, 1500); 
+            }, 1200); 
           } else {
             setIsSpeaking(false);
           }
@@ -278,8 +276,8 @@ const ViewQuestions = () => {
       </div>
 
       <div style={{ padding: '0 20px 200px 20px' }}>
-        {(mode === 'timer' && !showModal ? [q] : testData.questions).map((item, idx) => {
-          const qIdx = (mode === 'timer' && !showModal) ? currentQIndex : idx;
+        {(mode === 'timer' ? [q] : testData.questions).map((item, idx) => {
+          const qIdx = mode === 'timer' ? currentQIndex : idx;
           const isAnswered = userSelections[qIdx] !== undefined;
           const selectedIdx = userSelections[qIdx];
           const correctIdx = parseInt(item.answer);
@@ -303,7 +301,7 @@ const ViewQuestions = () => {
                     <div key={oIdx} onClick={() => handleOptionClick(qIdx, oIdx)} style={{
                         ...optionItemStyle, backgroundColor: bgColor, borderColor: borderColor, color: textColor,
                         cursor: (mode === 'practice' || isAnswered) ? 'default' : 'pointer',
-                        pointerEvents: (mode === 'practice' || isAnswered) ? 'none' : 'auto',
+                        pointerEvents: mode === 'practice' ? 'none' : 'auto',
                         opacity: (mode === 'practice' && oIdx !== correctIdx) ? 0.7 : 1
                       }}>
                       <strong>{String.fromCharCode(65+oIdx)})</strong> {opt}
@@ -312,7 +310,8 @@ const ViewQuestions = () => {
                 })}
               </div>
 
-              {(mode === 'practice' || isAnswered || (showModal && mode !== 'practice')) && item.explanation && (
+              {/* --- NEW: EXPLANATION BOX (ONLY IN PRACTICE MODE) --- */}
+              {mode === 'practice' && item.explanation && (
                 <div style={explanationBoxStyle}>
                   <strong style={{ display: 'block', marginBottom: '6px', color: '#854d0e', fontSize: '0.85rem' }}>
                     💡 Explanation:
@@ -325,7 +324,7 @@ const ViewQuestions = () => {
         })}
       </div>
 
-      {mode !== 'practice' && !showModal && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
+      {mode !== 'practice' && (mode === 'exam' || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
         <div style={stickyFooterStyle}>
           <button onClick={() => handleFinishQuiz()} style={submitBtnStyle}>Finish Quiz & View Score</button>
         </div>
@@ -369,8 +368,7 @@ const ViewQuestions = () => {
             <div style={statStyle}>❌ Incorrect: <strong>{report.wrong}</strong></div>
             <div style={statStyle}>⚪ Skipped: <strong>{report.skipped}</strong></div>
             <div style={scoreBadge}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
-            <button onClick={() => setShowModal(false)} style={{ ...doneBtnStyle, marginTop: '20px', backgroundColor: '#10b981' }}>Review Answers</button>
-            <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '10px' }}>Go Back</button>
+            <button onClick={() => navigate(-1)} style={{ ...doneBtnStyle, marginTop: '20px' }}>Go Back</button>
           </div>
         </div>
       )}
@@ -378,7 +376,7 @@ const ViewQuestions = () => {
   );
 };
 
-// --- Styles unchanged ---
+// --- Styles ---
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { maxWidth: '800px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const backBtnStyle = { marginTop: '20px', padding: '8px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontWeight: 'bold' };
@@ -404,8 +402,9 @@ const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', h
 const modalContentStyle = { backgroundColor: '#fff', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '350px' };
 const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' };
 const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '10px', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px' };
-const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none', cursor: 'pointer' };
+const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none' };
 
+// Explanation Box Style
 const explanationBoxStyle = {
   marginTop: '15px',
   padding: '12px 16px',
