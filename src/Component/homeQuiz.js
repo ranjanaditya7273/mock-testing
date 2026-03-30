@@ -28,36 +28,50 @@ const HomeQuiz = ({ setCategories }) => {
     cat.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- PARSER TO HANDLE EXPLANATION ---
+  // --- UPDATED PARSER TO HANDLE MULTI-LINE QUESTIONS & EXPLANATIONS ---
   const parseRawText = (text) => {
     if (!text) return [];
     const lines = text.split('\n');
     const parsedQuestions = [];
     let currentQ = {};
-    let collectingExplanation = false;
+    let lastField = ""; // ट्रैक करने के लिए कि पिछला डेटा क्या था
 
     lines.forEach((line) => {
       const trimmedLine = line.trim();
-      
+      if (trimmedLine === "") return; // खाली लाइन को इग्नोर करें
+
       if (trimmedLine.startsWith('Q:')) {
         if (currentQ.question) parsedQuestions.push(currentQ);
         currentQ = { question: trimmedLine.replace('Q:', '').trim(), explanation: "" };
-        collectingExplanation = false;
+        lastField = "question";
       } else if (trimmedLine.startsWith('A)')) {
         currentQ.a = trimmedLine.replace('A)', '').trim();
+        lastField = "a";
       } else if (trimmedLine.startsWith('B)')) {
         currentQ.b = trimmedLine.replace('B)', '').trim();
+        lastField = "b";
       } else if (trimmedLine.startsWith('C)')) {
         currentQ.c = trimmedLine.replace('C)', '').trim();
+        lastField = "c";
       } else if (trimmedLine.startsWith('D)')) {
         currentQ.d = trimmedLine.replace('D)', '').trim();
+        lastField = "d";
       } else if (trimmedLine.startsWith('ANS:')) {
         currentQ.answer = trimmedLine.replace('ANS:', '').trim();
+        lastField = "answer";
       } else if (trimmedLine.startsWith('Explanation:')) {
-        collectingExplanation = true;
         currentQ.explanation = trimmedLine.replace('Explanation:', '').trim();
-      } else if (collectingExplanation && trimmedLine !== "") {
-        currentQ.explanation += (currentQ.explanation ? "\n" : "") + trimmedLine;
+        lastField = "explanation";
+      } else {
+        // अगर लाइन किसी कीवर्ड से शुरू नहीं होती, तो उसे पिछले फील्ड में जोड़ें
+        if (lastField === "question") {
+          currentQ.question += "\n" + trimmedLine;
+        } else if (lastField === "explanation") {
+          currentQ.explanation += (currentQ.explanation ? "\n" : "") + trimmedLine;
+        } else if (lastField && currentQ[lastField] !== undefined) {
+          // विकल्पों (A, B, C, D) के लिए भी मल्टी-लाइन सपोर्ट
+          currentQ[lastField] += "\n" + trimmedLine;
+        }
       }
     });
     if (currentQ.question) parsedQuestions.push(currentQ);
@@ -90,34 +104,39 @@ const HomeQuiz = ({ setCategories }) => {
         const testStore = tx.objectStore("tests");
         const sectionStore = tx.objectStore("sections");
 
-        const existingSectionsRequest = sectionStore.getAll();
-        
-        existingSectionsRequest.onsuccess = () => {
-          const existingNames = new Set(existingSectionsRequest.result.map(s => s.name));
-          
-          result.data.forEach((quiz) => {
-            const content = quiz.fileContent || ""; 
-            const questionsArray = parseRawText(content);
-            
-            testStore.put({
-              id: quiz._id,
-              testName: quiz.testName || "Untitled Test",
-              category: quiz.category || "General",
-              description: quiz.description || "",
-              totalQuestions: quiz.totalQuestions || questionsArray.length,
-              questions: questionsArray,
-              createdAt: quiz.createdAt || new Date().toISOString()
+        // गेट एक्जिस्टिंग सेक्शन्स
+        const getAllSections = () => {
+            return new Promise((resolve) => {
+                const req = sectionStore.getAll();
+                req.onsuccess = () => resolve(req.result);
             });
-
-            if (quiz.category && !existingNames.has(quiz.category.trim())) {
-              sectionStore.add({ 
-                name: quiz.category.trim(), 
-                createdAt: quiz.createdAt ? new Date(quiz.createdAt).getTime() : Date.now() 
-              });
-              existingNames.add(quiz.category.trim());
-            }
-          });
         };
+
+        const existingSections = await getAllSections();
+        const existingNames = new Set(existingSections.map(s => s.name));
+          
+        result.data.forEach((quiz) => {
+          const content = quiz.fileContent || ""; 
+          const questionsArray = parseRawText(content);
+          
+          testStore.put({
+            id: quiz._id,
+            testName: quiz.testName || "Untitled Test",
+            category: quiz.category || "General",
+            description: quiz.description || "",
+            totalQuestions: quiz.totalQuestions || questionsArray.length,
+            questions: questionsArray,
+            createdAt: quiz.createdAt || new Date().toISOString()
+          });
+
+          if (quiz.category && !existingNames.has(quiz.category.trim())) {
+            sectionStore.add({ 
+              name: quiz.category.trim(), 
+              createdAt: quiz.createdAt ? new Date(quiz.createdAt).getTime() : Date.now() 
+            });
+            existingNames.add(quiz.category.trim());
+          }
+        });
 
         tx.oncomplete = () => {
           loadLocalData(); 
@@ -133,7 +152,6 @@ const HomeQuiz = ({ setCategories }) => {
         };
 
       } else {
-        // यहाँ बैकएंड से 'Data fetch karne mein galti hui' का असली कारण दिखेगा
         setLoginError(result.details || result.error || "Login Failed");
       }
     } catch (err) {
@@ -398,7 +416,7 @@ const HomeQuiz = ({ setCategories }) => {
   );
 };
 
-// --- CSS Styles ---
+// CSS Styles (No change needed here)
 const mainContentStyle = { padding: '20px 5% 50px', maxWidth: '1200px', margin: '0 auto' };
 const welcomeHeader = { textAlign: 'center', marginBottom: '25px' };
 const firstTimeBox = { textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '25px', border: '2px dashed #3b82f6', marginTop: '30px' };
