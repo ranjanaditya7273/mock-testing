@@ -26,6 +26,11 @@ const ViewQuestions = () => {
   const [playbackRate, setPlaybackRate] = useState(1); 
   const [repeatMode, setRepeatMode] = useState(false); 
 
+  // --- DRAGGABLE STATES ---
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const isDragging = useRef(false);
+  const offset = useRef({ x: 0, y: 0 });
+
   // Refs for Speech Engine
   const activeSpeechId = useRef(0);
   const rateRef = useRef(1);
@@ -36,7 +41,7 @@ const ViewQuestions = () => {
   const isFirstQ = currentQIndex === 0;
   const isLastQ = testData ? currentQIndex === testData.questions.length - 1 : false;
 
-  // --- CORE FIX 1: Initial Flush & Voice Pre-loading ---
+  // --- INITIAL SETUP ---
   useEffect(() => {
     window.speechSynthesis.cancel(); 
     const loadVoices = () => window.speechSynthesis.getVoices();
@@ -45,6 +50,9 @@ const ViewQuestions = () => {
 
     return () => {
       window.speechSynthesis.cancel();
+      // Clean up event listeners if any remain
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
     };
   }, []);
 
@@ -64,6 +72,59 @@ const ViewQuestions = () => {
       setUserSelections(autoSelect);
     }
   }, [testData, mode]);
+
+  // --- IMPROVED DRAGGING LOGIC (CLICK ANYWHERE) ---
+  const handleDragStart = (e) => {
+    // Buttons or Selects par click karne se drag start na ho
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
+
+    isDragging.current = true;
+    const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    
+    offset.current = {
+      x: clientX - position.x,
+      y: clientY - position.y
+    };
+    
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('touchend', handleDragEnd);
+  };
+
+  const handleDragMove = (e) => {
+    if (!isDragging.current) return;
+    
+    // Prevent scrolling on mobile while dragging
+    if (e.type === 'touchmove') e.preventDefault();
+
+    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+    let newX = clientX - offset.current.x;
+    let newY = clientY - offset.current.y;
+
+    // Boundaries: Ensure it stays partially visible
+    const padding = 50;
+    const minX = -(window.innerWidth / 2) + padding;
+    const maxX = (window.innerWidth / 2) - padding;
+    const minY = -window.innerHeight + padding + 100; // bottom-up limit
+    const maxY = 50; 
+
+    setPosition({
+      x: Math.min(Math.max(newX, minX), maxX),
+      y: Math.min(Math.max(newY, minY), maxY)
+    });
+  };
+
+  const handleDragEnd = () => {
+    isDragging.current = false;
+    document.removeEventListener('mousemove', handleDragMove);
+    document.removeEventListener('mouseup', handleDragEnd);
+    document.removeEventListener('touchmove', handleDragMove);
+    document.removeEventListener('touchend', handleDragEnd);
+  };
 
   // --- SPEECH ENGINE ---
   const startSpeechEngine = (index, type, isNewStart = true) => {
@@ -115,7 +176,7 @@ const ViewQuestions = () => {
           repeatCountRef.current++;
           setTimeout(() => {
             if (currentId === activeSpeechId.current && !isManuallyStopped.current) {
-               startSpeechEngine(index, type, false); 
+                startSpeechEngine(index, type, false); 
             }
           }, 600);
         } else {
@@ -310,7 +371,6 @@ const ViewQuestions = () => {
                 })}
               </div>
 
-              {/* --- NEW: EXPLANATION BOX (ONLY IN PRACTICE MODE) --- */}
               {mode === 'practice' && item.explanation && (
                 <div style={explanationBoxStyle}>
                   <strong style={{ display: 'block', marginBottom: '6px', color: '#854d0e', fontSize: '0.85rem' }}>
@@ -331,11 +391,24 @@ const ViewQuestions = () => {
       )}
 
       {showPlayer && mode === 'practice' && (
-        <div style={playerCardStyle}>
+        <div 
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          style={{
+            ...playerCardStyle,
+            transform: `translate(calc(-50% + ${position.x}px), ${position.y}px)`,
+            transition: isDragging.current ? 'none' : 'transform 0.1s ease-out',
+            cursor: isDragging.current ? 'grabbing' : 'grab'
+          }}
+        >
+          {/* Top Visual Indicator */}
+          <div style={{width: '30px', height: '4px', backgroundColor: '#e2e8f0', borderRadius: '2px', margin: '0 auto 10px auto'}}></div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Player Q{currentQIndex + 1} of {testData.questions.length}</span>
             <button onClick={() => { stopSpeech(); setShowPlayer(false); }} style={closeBtnStyle}>✕</button>
           </div>
+          
           <div style={{ marginBottom: '10px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '15px' }}>
              <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
                <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 'bold' }}>SPEED:</span>
@@ -350,6 +423,7 @@ const ViewQuestions = () => {
                </button>
              )}
           </div>
+          
           <div style={playerControlsRow}>
             <button disabled={isFirstQ} onClick={() => handleNextPrev(currentQIndex - 1)} style={{...playerSmallBtn, opacity: isFirstQ ? 0.3 : 1}}>Prev</button>
             <button onClick={() => { if (isSpeaking) stopSpeech(); else startSpeechEngine(currentQIndex, speechType || 'oneliner', true); }} style={playerMainBtn}>
@@ -390,7 +464,23 @@ const optionItemStyle = { padding: '12px', border: '2px solid', borderRadius: '1
 const timerBoxStyle = { position: 'absolute', top: '15px', right: '20px', backgroundColor: '#fff', padding: '8px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
 const stickyFooterStyle = { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '800px', backgroundColor: '#fff', padding: '15px', boxShadow: '0 -5px 15px rgba(0,0,0,0.05)', zIndex: 99 };
 const submitBtnStyle = { width: '100%', padding: '15px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '12px', fontWeight: 'bold', border: 'none' };
-const playerCardStyle = { position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', width: '92%', maxWidth: '400px', backgroundColor: '#fff', borderRadius: '24px', padding: '18px', boxShadow: '0 -10px 40px rgba(0,0,0,0.1)', zIndex: 1000, border: '1px solid #e2e8f0' };
+
+const playerCardStyle = { 
+  position: 'fixed', 
+  bottom: '20px', 
+  left: '50%', 
+  width: '92%', 
+  maxWidth: '400px', 
+  backgroundColor: '#fff', 
+  borderRadius: '24px', 
+  padding: '12px 18px 18px 18px', 
+  boxShadow: '0 -10px 40px rgba(0,0,0,0.15)', 
+  zIndex: 1000, 
+  border: '1px solid #e2e8f0',
+  touchAction: 'none', // Critical for dragging on mobile
+  userSelect: 'none'    // Prevent text selection while dragging
+};
+
 const speedSelectStyle = { padding: '4px 8px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem' };
 const repeatBtnStyle = { padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.75rem', fontWeight: 'bold' };
 const playerControlsRow = { display: 'flex', justifyContent: 'space-between', margin: '12px 0', alignItems: 'center' };
@@ -404,7 +494,6 @@ const statStyle = { display: 'flex', justifyContent: 'space-between', marginBott
 const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '10px', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px' };
 const doneBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '10px', border: 'none' };
 
-// Explanation Box Style
 const explanationBoxStyle = {
   marginTop: '15px',
   padding: '12px 16px',
