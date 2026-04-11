@@ -214,7 +214,6 @@ const ViewQuestions = () => {
   const handleOptionClick = (qIdx, selectedIdx) => {
     if (mode === 'practice' || ((mode === 'exam' || mode === 'timer') && userSelections[qIdx] !== undefined)) return;
     
-    // --- INTENSE SINGLE CENTER BLAST LOGIC ---
     if (selectedIdx === parseInt(testData.questions[qIdx].answer)) {
         confetti({
           particleCount: 400, 
@@ -222,7 +221,7 @@ const ViewQuestions = () => {
           spread: 360, 
           origin: { x: 0.5, y: 0.5 }, 
           colors: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6'],
-          zIndex: 1002,
+          zIndex: 3000, // Z-index increased for modal visibility
           gravity: 0.8, 
           scalar: 1.2 
         });
@@ -299,9 +298,6 @@ const ViewQuestions = () => {
     backgroundColor: isFullScreen ? '#fff' : '#f8fafc' 
   };
 
-  // --- LOGIC FOR SCROLLABLE LIST VS SINGLE VIEW ---
-  // If mode is 'exam' or 'practice', show ALL questions (Scrollable)
-  // If mode is 'timer', show only CURRENT question
   const questionsToRender = (mode === 'exam' || mode === 'practice') 
     ? testData.questions 
     : [testData.questions[currentQIndex]];
@@ -311,13 +307,12 @@ const ViewQuestions = () => {
       <div style={{ width: '100%', position: 'relative', padding: isFullScreen ? '10px 20px' : '0', zIndex: 10 }}>
         {!isFullScreen && <button onClick={() => { stopSpeech(); navigate(-1); }} style={backBtnStyle}>← Back</button>}
         
-        {mode === 'timer' && (
-          <div style={isFullScreen ? fsHeaderFixed : fullScreenToggleBox}>
-              <button onClick={toggleFullScreen} style={fullScreenBtn}>
-                {isFullScreen ? '🔳 Exit FullScreen' : '🔲 FullScreen'}
-              </button>
-          </div>
-        )}
+        {/* Fullscreen button now visible in ALL modes */}
+        <div style={isFullScreen ? fsHeaderFixed : fullScreenToggleBox}>
+            <button onClick={toggleFullScreen} style={fullScreenBtn}>
+              {isFullScreen ? '🔳 Exit FullScreen' : '🔲 FullScreen'}
+            </button>
+        </div>
 
         {mode === 'timer' && !showModal && (
           <div style={isFullScreen ? timerFsStyle : timerBoxStyle}>
@@ -331,7 +326,7 @@ const ViewQuestions = () => {
         )}
 
         {mode === 'practice' && (
-          <div style={voiceControlsHeader}>
+          <div style={isFullScreen ? voiceControlsFs : voiceControlsHeader}>
             <button 
               onClick={() => { setRepeatMode(false); isRepeatActiveRef.current = false; setShowPlayer(true); startSpeechEngine(currentQIndex, 'oneliner', true); }} 
               style={{...voiceBtn, backgroundColor: speechType === 'oneliner' ? '#3b82f6' : '#fff', color: speechType === 'oneliner' ? '#fff' : '#3b82f6'}}
@@ -360,12 +355,10 @@ const ViewQuestions = () => {
           flexDirection: 'column', 
           justifyContent: (isFullScreen && mode === 'timer') ? 'center' : 'flex-start',
           alignItems: 'center',
-          padding: isFullScreen ? '0' : '0 0 200px 0', 
+          padding: isFullScreen ? '20px 0' : '0 0 200px 0', 
           overflowY: 'auto'
       }}>
         {questionsToRender.map((item, idx) => {
-          // In scrollable list (Exam/Practice), the actual index is 'idx'. 
-          // In single view (Timer), it's 'currentQIndex'.
           const qIdx = (mode === 'exam' || mode === 'practice') ? idx : currentQIndex;
           const isAnswered = userSelections[qIdx] !== undefined;
           const selectedIdx = userSelections[qIdx];
@@ -433,8 +426,7 @@ const ViewQuestions = () => {
                 <div style={{
                     ...explanationBoxStyle, 
                     fontSize: isFullScreen ? '1.6rem' : '0.92rem',
-                    marginTop: isFullScreen ? '60px' : '15px',
-                    borderLeft: '5px solid #eab308'
+                    marginTop: isFullScreen ? '60px' : '15px'
                 }}>
                   <strong style={{ display: 'block', marginBottom: '10px', color: '#854d0e' }}>💡 Explanation:</strong>
                   {item.explanation}
@@ -445,8 +437,7 @@ const ViewQuestions = () => {
         })}
       </div>
 
-      {/* Footer is only visible in Exam mode or at the end of Timer mode */}
-      {((mode === 'exam') || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && (
+      {((mode === 'exam') || (mode === 'timer' && currentQIndex === testData.questions.length - 1)) && !showModal && (
         <div style={{...stickyFooterStyle, width: isFullScreen ? '100%' : '800px', borderRadius: isFullScreen ? '0' : '20px 20px 0 0'}}>
           <button onClick={() => handleFinishQuiz()} style={submitBtnStyle}>Finish Quiz & View Score</button>
         </div>
@@ -496,13 +487,13 @@ const ViewQuestions = () => {
 
       {showModal && report && (
         <div style={modalOverlayStyle}>
-          <div style={modalContentStyle}>
-            <h2 style={{marginBottom: '20px', color: '#1e293b'}}>Quiz Result</h2>
-            <div style={statStyle}>✅ Correct: <strong>{report.correct}</strong></div>
-            <div style={statStyle}>❌ Incorrect: <strong>{report.wrong}</strong></div>
-            <div style={statStyle}>⚪ Skipped: <strong>{report.skipped}</strong></div>
-            <div style={scoreBadge}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
-            <button onClick={() => { if(isFullScreen) toggleFullScreen(); navigate(-1); }} style={{ ...doneBtnStyle, marginTop: '20px' }}>Go Back</button>
+          <div style={{...modalContentStyle, width: isFullScreen ? '80%' : '90%', maxWidth: isFullScreen ? '600px' : '400px'}}>
+            <h2 style={{marginBottom: '20px', color: '#1e293b', fontSize: isFullScreen ? '2.5rem' : '1.5rem'}}>Quiz Result</h2>
+            <div style={{...statStyle, fontSize: isFullScreen ? '1.8rem' : '1.1rem'}}>✅ Correct: <strong>{report.correct}</strong></div>
+            <div style={{...statStyle, fontSize: isFullScreen ? '1.8rem' : '1.1rem'}}>❌ Incorrect: <strong>{report.wrong}</strong></div>
+            <div style={{...statStyle, fontSize: isFullScreen ? '1.8rem' : '1.1rem'}}>⚪ Skipped: <strong>{report.skipped}</strong></div>
+            <div style={{...scoreBadge, fontSize: isFullScreen ? '2rem' : '1.2rem', padding: isFullScreen ? '30px' : '15px'}}>Score: {Math.round((report.correct / report.total) * 100)}%</div>
+            <button onClick={() => { if(isFullScreen) toggleFullScreen(); navigate(-1); }} style={{ ...doneBtnStyle, marginTop: '20px', fontSize: isFullScreen ? '1.5rem' : '1rem' }}>Go Back</button>
           </div>
         </div>
       )}
@@ -514,6 +505,7 @@ const ViewQuestions = () => {
 const fsHeaderFixed = { position: 'fixed', top: '20px', left: '20px', zIndex: 1001 };
 const fullScreenToggleBox = { position: 'absolute', left: '50%', top: '20px', transform: 'translateX(-50%)', zIndex: 10 };
 const timerFsStyle = { position: 'fixed', top: '20px', right: '40px', backgroundColor: '#fff', padding: '15px 25px', borderRadius: '20px', border: '3px solid #3b82f6', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', zIndex: 1001 };
+const voiceControlsFs = { position: 'fixed', top: '20px', right: '200px', display: 'flex', gap: '8px', zIndex: 1001 };
 const fullScreenBtn = { padding: '10px 20px', borderRadius: '12px', border: '2px solid #e2e8f0', backgroundColor: '#fff', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem', color: '#1e293b', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' };
 const centerMsg = { padding: '100px', textAlign: 'center' };
 const containerStyle = { margin: '0 auto', minHeight: '100vh', transition: 'all 0.3s ease' };
@@ -528,7 +520,7 @@ const optionItemStyle = { border: '2px solid', borderRadius: '15px', transition:
 const timerBoxStyle = { position: 'absolute', top: '15px', right: '20px', backgroundColor: '#fff', padding: '8px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' };
 const stickyFooterStyle = { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', backgroundColor: '#fff', padding: '20px', boxShadow: '0 -5px 25px rgba(0,0,0,0.1)', zIndex: 99 };
 const submitBtnStyle = { width: '100%', padding: '18px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '15px', fontWeight: 'bold', border: 'none', fontSize: '1.1rem', cursor: 'pointer' };
-const playerCardStyle = { position: 'fixed', backgroundColor: '#fff', borderRadius: '30px', padding: '20px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', zIndex: 1000, border: '1px solid #e2e8f0', touchAction: 'none', userSelect: 'none' };
+const playerCardStyle = { position: 'fixed', backgroundColor: '#fff', borderRadius: '30px', padding: '20px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', zIndex: 1002, border: '1px solid #e2e8f0', touchAction: 'none', userSelect: 'none' };
 const speedSelectStyle = { padding: '6px 12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.85rem', fontWeight: '600' };
 const repeatBtnStyle = { padding: '6px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '0.8rem', fontWeight: 'bold' };
 const playerControlsRow = { display: 'flex', justifyContent: 'space-between', margin: '15px 0', alignItems: 'center', gap: '10px' };
@@ -537,9 +529,9 @@ const playerSmallBtn = { background: '#f1f5f9', border: 'none', padding: '10px 2
 const closeBtnStyle = { border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#94a3b8' };
 const modeBadgeStyle = (mode) => ({ padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold', backgroundColor: mode === 'practice' ? '#dcfce7' : '#ffedd5', color: mode === 'practice' ? '#166534' : '#9a3412' });
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
-const modalContentStyle = { backgroundColor: '#fff', padding: '40px', borderRadius: '30px', textAlign: 'center', width: '90%', maxWidth: '400px' };
-const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', fontSize: '1.1rem' };
-const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', padding: '15px', borderRadius: '15px', fontWeight: 'bold', marginTop: '20px', fontSize: '1.2rem' };
+const modalContentStyle = { backgroundColor: '#fff', padding: '40px', borderRadius: '30px', textAlign: 'center' };
+const statStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '15px' };
+const scoreBadge = { backgroundColor: '#3b82f6', color: '#fff', borderRadius: '15px', fontWeight: 'bold', marginTop: '20px' };
 const doneBtnStyle = { width: '100%', padding: '15px', backgroundColor: '#1e293b', color: '#fff', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer' };
 const explanationBoxStyle = { marginTop: '15px', padding: '15px 20px', backgroundColor: '#fefce8', borderLeft: '5px solid #eab308', borderRadius: '12px', color: '#422006', lineHeight: '1.6', whiteSpace: 'pre-wrap' };
 
