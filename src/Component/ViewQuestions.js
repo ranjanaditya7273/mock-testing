@@ -325,23 +325,41 @@ const ViewQuestions = () => {
               color: timeLeft <= 5 ? '#ef4444' : '#3b82f6'
             }}>{timeLeft}s</span>
 
-            {/* PAUSE BUTTON (ONLY TIMER STOP) */}
-            <button 
-              onClick={() => setIsPaused(!isPaused)} 
-              style={{
-                marginTop: '8px',
-                padding: '5px 15px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: isPaused ? '#10b981' : '#f59e0b',
-                color: '#fff',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '0.8rem'
-              }}
-            >
-              {isPaused ? '▶ Resume' : '⏸ Pause'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              {/* PAUSE BUTTON */}
+              <button 
+                onClick={() => setIsPaused(!isPaused)} 
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: isPaused ? '#10b981' : '#f59e0b',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem'
+                }}
+              >
+                {isPaused ? '▶ Resume' : '⏸ Pause'}
+              </button>
+
+              {/* SKIP BUTTON */}
+              <button 
+                onClick={() => handleNextOrFinish()} 
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  backgroundColor: '#6366f1',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem'
+                }}
+              >
+                ⏭ Skip
+              </button>
+            </div>
           </div>
         )}
 
