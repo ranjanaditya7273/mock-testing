@@ -22,6 +22,9 @@ const ViewQuestions = () => {
   // --- FULL SCREEN STATE ---
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  // --- PAUSE STATE ---
+  const [isPaused, setIsPaused] = useState(false);
+
   // Voice States
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechType, setSpeechType] = useState(null); 
@@ -81,12 +84,12 @@ const ViewQuestions = () => {
 
   // Timer Logic
   useEffect(() => {
-    if (mode === 'timer' && !showModal && testData) {
+    if (mode === 'timer' && !showModal && !isPaused && testData) {
       if (timeLeft <= 0) { handleNextOrFinish(); return; }
       timerRef.current = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
     }
     return () => clearTimeout(timerRef.current);
-  }, [timeLeft, currentQIndex, mode, showModal, testData]);
+  }, [timeLeft, currentQIndex, mode, showModal, testData, isPaused]);
 
   useEffect(() => {
     if (testData && mode === 'practice') {
@@ -212,7 +215,7 @@ const ViewQuestions = () => {
   };
 
   const handleOptionClick = (qIdx, selectedIdx) => {
-    if (mode === 'practice' || ((mode === 'exam' || mode === 'timer') && userSelections[qIdx] !== undefined)) return;
+    if (isPaused || mode === 'practice' || ((mode === 'exam' || mode === 'timer') && userSelections[qIdx] !== undefined)) return;
     
     if (selectedIdx === parseInt(testData.questions[qIdx].answer)) {
         confetti({
@@ -221,7 +224,7 @@ const ViewQuestions = () => {
           spread: 360, 
           origin: { x: 0.5, y: 0.5 }, 
           colors: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6'],
-          zIndex: 3000, // Z-index increased for modal visibility
+          zIndex: 3000, 
           gravity: 0.8, 
           scalar: 1.2 
         });
@@ -307,7 +310,6 @@ const ViewQuestions = () => {
       <div style={{ width: '100%', position: 'relative', padding: isFullScreen ? '10px 20px' : '0', zIndex: 10 }}>
         {!isFullScreen && <button onClick={() => { stopSpeech(); navigate(-1); }} style={backBtnStyle}>← Back</button>}
         
-        {/* Fullscreen button now visible in ALL modes */}
         <div style={isFullScreen ? fsHeaderFixed : fullScreenToggleBox}>
             <button onClick={toggleFullScreen} style={fullScreenBtn}>
               {isFullScreen ? '🔳 Exit FullScreen' : '🔲 FullScreen'}
@@ -322,6 +324,24 @@ const ViewQuestions = () => {
               fontWeight: '800', 
               color: timeLeft <= 5 ? '#ef4444' : '#3b82f6'
             }}>{timeLeft}s</span>
+
+            {/* PAUSE BUTTON (ONLY TIMER STOP) */}
+            <button 
+              onClick={() => setIsPaused(!isPaused)} 
+              style={{
+                marginTop: '8px',
+                padding: '5px 15px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isPaused ? '#10b981' : '#f59e0b',
+                color: '#fff',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontSize: '0.8rem'
+              }}
+            >
+              {isPaused ? '▶ Resume' : '⏸ Pause'}
+            </button>
           </div>
         )}
 
@@ -410,7 +430,7 @@ const ViewQuestions = () => {
                         backgroundColor: bgColor, borderColor: borderColor, color: textColor,
                         fontSize: isFullScreen ? '2.1rem' : '1rem', 
                         padding: isFullScreen ? '40px' : '15px',
-                        cursor: (mode === 'practice' || isAnswered) ? 'default' : 'pointer',
+                        cursor: (mode === 'practice' || isAnswered || isPaused) ? 'default' : 'pointer',
                         pointerEvents: (mode === 'practice' && !isFullScreen) ? 'none' : 'auto',
                         opacity: (mode === 'practice' && oIdx !== correctIdx) ? 0.7 : 1,
                         display: 'flex',
