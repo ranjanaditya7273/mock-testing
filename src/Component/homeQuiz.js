@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layout, Home, PlusSquare, PlusCircle, X, Edit3, ChevronRight, Trash2, AlertTriangle, Menu, RefreshCw, ShieldCheck, Search, SearchX, DatabaseZap } from 'lucide-react'; 
+import { Layout, Home, PlusSquare, PlusCircle, X, Edit3, ChevronRight, Trash2, AlertTriangle, Menu, RefreshCw, ShieldCheck, Search, SearchX, DatabaseZap, Book as BookIcon } from 'lucide-react'; 
 import { openDB } from '../db'; 
 
 const HomeQuiz = ({ setCategories }) => {
   const navigate = useNavigate();
-  const [localCategories, setLocalCategories] = useState([]);
+  const [localBooks, setLocalBooks] = useState([]); // अब हम Books स्टोर करेंगे
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -24,21 +24,21 @@ const HomeQuiz = ({ setCategories }) => {
   const [authorNameInput, setAuthorNameInput] = useState("");
   const [isWrongAuthor, setIsWrongAuthor] = useState(false);
 
-  const filteredCategories = localCategories.filter(cat => 
-    cat.toLowerCase().includes(searchQuery.toLowerCase())
+  // सर्च फिल्टर (बुक्स के नाम पर)
+  const filteredBooks = localBooks.filter(book => 
+    book.bookName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // --- UPDATED PARSER TO HANDLE MULTI-LINE QUESTIONS & EXPLANATIONS ---
   const parseRawText = (text) => {
     if (!text) return [];
     const lines = text.split('\n');
     const parsedQuestions = [];
     let currentQ = {};
-    let lastField = ""; // ट्रैक करने के लिए कि पिछला डेटा क्या था
+    let lastField = "";
 
     lines.forEach((line) => {
       const trimmedLine = line.trim();
-      if (trimmedLine === "") return; // खाली लाइन को इग्नोर करें
+      if (trimmedLine === "") return;
 
       if (trimmedLine.startsWith('Q:')) {
         if (currentQ.question) parsedQuestions.push(currentQ);
@@ -63,13 +63,11 @@ const HomeQuiz = ({ setCategories }) => {
         currentQ.explanation = trimmedLine.replace('Explanation:', '').trim();
         lastField = "explanation";
       } else {
-        // अगर लाइन किसी कीवर्ड से शुरू नहीं होती, तो उसे पिछले फील्ड में जोड़ें
         if (lastField === "question") {
           currentQ.question += "\n" + trimmedLine;
         } else if (lastField === "explanation") {
           currentQ.explanation += (currentQ.explanation ? "\n" : "") + trimmedLine;
         } else if (lastField && currentQ[lastField] !== undefined) {
-          // विकल्पों (A, B, C, D) के लिए भी मल्टी-लाइन सपोर्ट
           currentQ[lastField] += "\n" + trimmedLine;
         }
       }
@@ -104,38 +102,35 @@ const HomeQuiz = ({ setCategories }) => {
         const testStore = tx.objectStore("tests");
         const sectionStore = tx.objectStore("sections");
 
-        // गेट एक्जिस्टिंग सेक्शन्स
-        const getAllSections = () => {
-            return new Promise((resolve) => {
-                const req = sectionStore.getAll();
-                req.onsuccess = () => resolve(req.result);
-            });
-        };
+        // पुराना डेटा क्लियर करें ताकि नया स्ट्रक्चर सही से सेट हो
+        testStore.clear();
+        sectionStore.clear();
 
-        const existingSections = await getAllSections();
-        const existingNames = new Set(existingSections.map(s => s.name));
-          
-        result.data.forEach((quiz) => {
-          const content = quiz.fileContent || ""; 
-          const questionsArray = parseRawText(content);
-          
-          testStore.put({
-            id: quiz._id,
-            testName: quiz.testName || "Untitled Test",
-            category: quiz.category || "General",
-            description: quiz.description || "",
-            totalQuestions: quiz.totalQuestions || questionsArray.length,
-            questions: questionsArray,
-            createdAt: quiz.createdAt || new Date().toISOString()
+        result.data.forEach((book) => {
+          // बुक को एज़ ए सेक्शन (या कैटेगरी) सेव करें
+          sectionStore.put({ 
+            id: book._id || book.bookId,
+            name: book.bookName, 
+            author: book.author || "",
+            createdAt: Date.now() 
           });
 
-          if (quiz.category && !existingNames.has(quiz.category.trim())) {
-            sectionStore.add({ 
-              name: quiz.category.trim(), 
-              createdAt: quiz.createdAt ? new Date(quiz.createdAt).getTime() : Date.now() 
+          // हर बुक की कैटेगरीज और उनके सवालों को प्रोसेस करें
+          book.categories.forEach(cat => {
+            cat.questions.forEach(quiz => {
+              const questionsArray = parseRawText(quiz.fileContent || "");
+              testStore.put({
+                id: quiz._id,
+                testName: quiz.testName,
+                category: cat.categoryName, // यहाँ कैटेगरी का नाम
+                bookName: book.bookName,    // रेफरेंस के लिए बुक का नाम
+                description: quiz.description || "",
+                totalQuestions: questionsArray.length,
+                questions: questionsArray,
+                createdAt: quiz.createdAt
+              });
             });
-            existingNames.add(quiz.category.trim());
-          }
+          });
         });
 
         tx.oncomplete = () => {
@@ -143,12 +138,7 @@ const HomeQuiz = ({ setCategories }) => {
           setShowAdminModal(false);
           setAdminEmail("");
           setAdminPassword("");
-          alert("Cloud data synchronized successfully!");
-        };
-
-        tx.onerror = (err) => {
-          console.error("IndexedDB Error:", err);
-          setLoginError("Local Database Error.");
+          alert("Data nested by Books & Categories synchronized!");
         };
 
       } else {
@@ -169,12 +159,12 @@ const HomeQuiz = ({ setCategories }) => {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const savedSections = request.result.map(s => s.name);
-        setLocalCategories(savedSections);
-        setCategories(savedSections);
+        setLocalBooks(request.result);
+        const names = request.result.map(b => b.name);
+        setCategories(names);
       };
     } catch (err) {
-      console.error("Error loading sections:", err);
+      console.error("Error loading books:", err);
     }
   };
 
@@ -182,29 +172,30 @@ const HomeQuiz = ({ setCategories }) => {
     loadLocalData();
   }, []);
 
-  const saveAllToDB = async (newCats) => {
+  // बाकी फंक्शन्स (handleSubmit, openEditModal, etc.) वैसे ही रहेंगे...
+  const saveAllToDB = async (newBooks) => {
     const db = await openDB();
     const tx = db.transaction("sections", "readwrite");
     const store = tx.objectStore("sections");
     store.clear(); 
-    newCats.forEach(cat => store.add({ name: cat }));
+    newBooks.forEach(book => store.add(book));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!sectionName.trim()) return;
 
-    let updatedCats;
+    let updatedBooks;
     if (isEditing) {
-      updatedCats = [...localCategories];
-      updatedCats[editIndex] = sectionName;
+      updatedBooks = [...localBooks];
+      updatedBooks[editIndex].name = sectionName;
     } else {
-      updatedCats = [...localCategories, sectionName];
+      updatedBooks = [...localBooks, { id: Date.now().toString(), name: sectionName }];
     }
 
-    setLocalCategories(updatedCats);
-    setCategories(updatedCats);
-    saveAllToDB(updatedCats);
+    setLocalBooks(updatedBooks);
+    setCategories(updatedBooks.map(b => b.name));
+    saveAllToDB(updatedBooks);
     
     setSectionName("");
     setShowModal(false);
@@ -231,10 +222,10 @@ const HomeQuiz = ({ setCategories }) => {
   const handleConfirmDelete = (e) => {
     e.preventDefault();
     if (authorNameInput.toLowerCase() === "aditya ranjan") {
-      const updatedCats = localCategories.filter((_, i) => i !== deleteTargetIndex);
-      setLocalCategories(updatedCats);
-      setCategories(updatedCats);
-      saveAllToDB(updatedCats);
+      const updatedBooks = localBooks.filter((_, i) => i !== deleteTargetIndex);
+      setLocalBooks(updatedBooks);
+      setCategories(updatedBooks.map(b => b.name));
+      saveAllToDB(updatedBooks);
       setShowDeleteModal(false);
     } else {
       setIsWrongAuthor(true);
@@ -249,6 +240,7 @@ const HomeQuiz = ({ setCategories }) => {
         </div>
       )}
 
+      {/* Navbar Section */}
       <nav style={navStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={logoStyle}>Er.</div>
@@ -259,7 +251,7 @@ const HomeQuiz = ({ setCategories }) => {
           <button onClick={() => navigate('/')} style={navBtn}><Home size={18} /> Home</button>
           <button onClick={() => navigate('/create-test')} style={navBtn}><PlusSquare size={18} /> Create Test</button>
           <button onClick={() => { setIsEditing(false); setSectionName(""); setShowModal(true); }} style={navBtn}>
-            <PlusCircle size={18} /> New Section
+            <PlusCircle size={18} /> New Book
           </button>
           <button onClick={() => setShowAdminModal(true)} style={navBtnPrimary}>
             <ShieldCheck size={18} /> Admin Sync
@@ -271,6 +263,7 @@ const HomeQuiz = ({ setCategories }) => {
         </button>
       </nav>
 
+      {/* Mobile Drawer */}
       {isMenuOpen && (
         <div style={drawerOverlay} onClick={() => setIsMenuOpen(false)}>
           <div style={drawerContent} onClick={(e) => e.stopPropagation()}>
@@ -280,7 +273,7 @@ const HomeQuiz = ({ setCategories }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <button onClick={() => { navigate('/'); setIsMenuOpen(false); }} style={drawerLink}><Home size={20} /> Home</button>
               <button onClick={() => { navigate('/create-test'); setIsMenuOpen(false); }} style={drawerLink}><PlusSquare size={20} /> Create Test</button>
-              <button onClick={() => { setIsEditing(false); setSectionName(""); setShowModal(true); setIsMenuOpen(false); }} style={drawerLink}><PlusCircle size={20} /> New Section</button>
+              <button onClick={() => { setIsEditing(false); setSectionName(""); setShowModal(true); setIsMenuOpen(false); }} style={drawerLink}><PlusCircle size={20} /> New Book</button>
               <button onClick={() => { setShowAdminModal(true); setIsMenuOpen(false); }} style={drawerLink}><ShieldCheck size={20} /> Admin Sync</button>
             </div>
           </div>
@@ -289,15 +282,15 @@ const HomeQuiz = ({ setCategories }) => {
 
       <div style={mainContentStyle}>
         <div style={welcomeHeader}>
-          <h1 style={{ fontSize: '2.2rem', color: '#0f172a', marginBottom: '5px' }}>Quiz Library</h1>
-          <p style={{ color: '#64748b' }}>Admin access required to sync cloud databases.</p>
+          <h1 style={{ fontSize: '2.2rem', color: '#0f172a', marginBottom: '5px' }}>Book Library</h1>
+          <p style={{ color: '#64748b' }}>Explore quizzes organized by books and categories.</p>
           
-          {localCategories.length > 0 && (
+          {localBooks.length > 0 && (
             <div style={searchContainer}>
               <Search size={20} color="#64748b" style={{ marginLeft: '15px' }} />
               <input 
                 type="text" 
-                placeholder="Search sections..." 
+                placeholder="Search books..." 
                 style={searchInput}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -309,26 +302,26 @@ const HomeQuiz = ({ setCategories }) => {
           )}
         </div>
 
-        {localCategories.length === 0 ? (
+        {localBooks.length === 0 ? (
           <div style={firstTimeBox}>
             <DatabaseZap size={50} color="#3b82f6" />
-            <h2 style={{ color: '#1e293b', marginTop: '20px' }}>No Content Available!</h2>
+            <h2 style={{ color: '#1e293b', marginTop: '20px' }}>No Books Available!</h2>
             <p style={{ color: '#64748b', maxWidth: '400px', margin: '10px auto', lineHeight: '1.5' }}>
-              Please use the **Admin Sync** button above to fetch data.
+              Please use the **Admin Sync** button above to fetch the latest nested database.
             </p>
           </div>
-        ) : filteredCategories.length > 0 ? (
+        ) : filteredBooks.length > 0 ? (
           <div style={gridStyle}>
-            {filteredCategories.map((cat, index) => (
-              <div key={index} style={cardStyle} onClick={() => navigate(`/category/${encodeURIComponent(cat)}`)}>
-                <div style={iconCircle}><Layout size={28} color="#3b82f6" /></div>
+            {filteredBooks.map((book, index) => (
+              <div key={index} style={cardStyle} onClick={() => navigate(`/category/${encodeURIComponent(book.name)}`)}>
+                <div style={iconCircle}><BookIcon size={28} color="#3b82f6" /></div>
                 <div style={{ flex: 1 }}>
-                  <h3 style={categoryTitle}>{cat}</h3>
-                  <p style={categorySubText}>Open Section <ChevronRight size={14} style={{ verticalAlign: 'middle' }} /></p>
+                  <h3 style={categoryTitle}>{book.name}</h3>
+                  <p style={categorySubText}>View Categories <ChevronRight size={14} style={{ verticalAlign: 'middle' }} /></p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={(e) => openEditModal(e, index, cat)} style={editIconBtn} title="Edit Section"><Edit3 size={18} /></button>
-                  <button onClick={(e) => openDelModal(e, index)} style={deleteIconBtn} title="Delete Section"><Trash2 size={18} /></button>
+                  <button onClick={(e) => openEditModal(e, index, book.name)} style={editIconBtn} title="Edit"><Edit3 size={18} /></button>
+                  <button onClick={(e) => openDelModal(e, index)} style={deleteIconBtn} title="Delete"><Trash2 size={18} /></button>
                 </div>
               </div>
             ))}
@@ -336,13 +329,14 @@ const HomeQuiz = ({ setCategories }) => {
         ) : (
           <div style={notFoundStyle}>
             <SearchX size={60} color="#cbd5e1" strokeWidth={1.5} />
-            <h3 style={{ color: '#1e293b', marginTop: '15px' }}>Section Not Found</h3>
+            <h3 style={{ color: '#1e293b', marginTop: '15px' }}>Book Not Found</h3>
             <p style={{ color: '#64748b', fontSize: '0.9rem' }}>No results for "{searchQuery}"</p>
             <button onClick={() => setSearchQuery("")} style={clearSearchBtn}>Clear Search</button>
           </div>
         )}
       </div>
 
+      {/* Admin Modal */}
       {showAdminModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
@@ -367,15 +361,16 @@ const HomeQuiz = ({ setCategories }) => {
         </div>
       )}
 
+      {/* New/Edit Modal */}
       {showModal && (
         <div style={modalOverlay}>
           <div style={modalContent}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0 }}>{isEditing ? "Edit Section" : "New Section"}</h3>
+              <h3 style={{ margin: 0 }}>{isEditing ? "Edit Book" : "New Book"}</h3>
               <X size={20} style={{ cursor: 'pointer' }} onClick={() => setShowModal(false)} />
             </div>
             <form onSubmit={handleSubmit}>
-              <label style={labelStyle}>Section Name</label>
+              <label style={labelStyle}>Book Name</label>
               <input autoFocus type="text" style={inputStyle} value={sectionName} onChange={(e) => setSectionName(e.target.value)} placeholder="Enter name" required />
               <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }}>
                 <button type="submit" style={saveBtn}>{isEditing ? "Update" : "Create"}</button>
@@ -386,6 +381,7 @@ const HomeQuiz = ({ setCategories }) => {
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
       {showDeleteModal && (
         <div style={modalOverlay}>
           <div style={{...modalContent, border: '2px solid #ef4444'}}>
@@ -416,7 +412,7 @@ const HomeQuiz = ({ setCategories }) => {
   );
 };
 
-// CSS Styles (No change needed here)
+// Styles (No major changes here, kept as provided)
 const mainContentStyle = { padding: '20px 5% 50px', maxWidth: '1200px', margin: '0 auto' };
 const welcomeHeader = { textAlign: 'center', marginBottom: '25px' };
 const firstTimeBox = { textAlign: 'center', padding: '60px 20px', backgroundColor: '#fff', borderRadius: '25px', border: '2px dashed #3b82f6', marginTop: '30px' };
